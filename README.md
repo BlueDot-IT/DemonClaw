@@ -39,6 +39,7 @@ Core spec coverage is in place:
 - AgentLoop orchestration
 - interval and basic cron scheduling
 - end-to-end acceptance coverage
+- **Web dashboard** with server-rendered UI, SSE live events, and operator controls
 
 ## What DemonClaw is for
 
@@ -62,6 +63,7 @@ Major subsystems:
 - **Evidence Locker**: tamper-evident event chain
 - **Scheduler**: interval and cron-driven event injection
 - **AgentLoop**: orchestration core for routing, execution, and lifecycle events
+- **Web Dashboard**: server-rendered Tera templates with SSE live event stream
 
 See `SPEC.md` for the architecture spec and `CONFIG.md` for runtime configuration.
 
@@ -69,7 +71,13 @@ See `SPEC.md` for the architecture spec and `CONFIG.md` for runtime configuratio
 
 - **Envelope ingestion**
   - REPL (stdin) ingestion
-  - HTTP ingest endpoint: `POST /ingest`
+  - HTTP ingest endpoint: `POST /ingest` (with rate limiting and constant-time auth)
+- **Web Dashboard** (`/dashboard/`)
+  - Dashboard with evidence stats, chain integrity, live event feed (SSE)
+  - Evidence chain viewer with verification status
+  - Security policy viewer
+  - Memory chunk search (hybrid vector + full-text)
+  - Payload management with one-click execution
 - **Routing**
   - SignalGate intent classification (`Query`, `Command`, `AttackPayload`)
   - deterministic local fallback for core directives
@@ -77,6 +85,8 @@ See `SPEC.md` for the architecture spec and `CONFIG.md` for runtime configuratio
   - engagement context enforcement
   - CIDR/domain allowlists
   - blocked-port and tool-level controls
+  - rate limiting on ingest (60 req/min)
+  - constant-time token comparison
 - **GhostMCP approval boundary** for sensitive actions
 - **WASM sandbox** execution for payloads (`wasmtime` + `wasmtime-wasi`)
 - **Payload Scanner** for pre-execution import/operator/capability checks
@@ -85,6 +95,14 @@ See `SPEC.md` for the architecture spec and `CONFIG.md` for runtime configuratio
 - **Scheduler**
   - interval jobs
   - basic 5-field cron support (`*`, lists, ranges, steps)
+- **API endpoints**
+  - `GET /healthz` -- health check
+  - `GET /api/status` -- system status with evidence count and policy
+  - `GET /api/evidence` -- evidence events (JSON)
+  - `GET /api/evidence/verify` -- chain verification
+  - `GET /api/policy` -- current security policy
+  - `GET /api/events/stream` -- SSE live event stream
+  - `GET /api/memory/search?q=...` -- semantic memory search
 - **Acceptance coverage** including end-to-end payload -> evidence flow tests
 
 ## Quick start
@@ -102,7 +120,7 @@ Default DB is exposed on `localhost:5433`.
 Create a `.env` file with at least:
 
 ```bash
-DATABASE_URL=postgres://postgres:postgres@localhost:5433/demonclaw
+DATABASE_URL=postgres://postgres:***@localhost:5433/demonclaw
 ```
 
 Optional but common:
@@ -122,7 +140,8 @@ cargo run
 
 Behavior:
 - REPL starts automatically
-- HTTP ingest starts automatically
+- HTTP server starts automatically (default `0.0.0.0:3000`)
+- Web dashboard available at `http://localhost:3000/dashboard/`
 - scheduler starts automatically
 - memory optimizer runs in the background when DB is available
 
@@ -134,6 +153,8 @@ curl -s \
   -d '{"content":"payload:test_payload"}' \
   http://localhost:3000/ingest
 ```
+
+Or use the web dashboard at `http://localhost:3000/dashboard/` -- the ingest form sends envelopes directly from the browser.
 
 ## Testing
 
