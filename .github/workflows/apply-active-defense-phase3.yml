@@ -6,6 +6,7 @@ on:
     paths:
       - .github/workflows/apply-active-defense-phase3.yml
       - .github/scripts/apply-phase3.py
+      - .github/scripts/repair-phase3-script.py
   workflow_dispatch:
 
 permissions:
@@ -29,7 +30,11 @@ jobs:
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
       - name: Apply Phase 3 implementation
-        run: python3 .github/scripts/apply-phase3.py
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/repair-phase3-script.py
+          python3 .github/scripts/apply-phase3.py
 
       - name: Format and verify
         shell: bash
@@ -48,7 +53,7 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$ORG_SYNC_TOKEN"
-          rm -f .github/workflows/apply-active-defense-phase3.yml .github/scripts/apply-phase3.py
+          rm -f .github/workflows/apply-active-defense-phase3.yml .github/scripts/apply-phase3.py .github/scripts/repair-phase3-script.py
           git config user.name "DemonClaw CI"
           git config user.email "actions@users.noreply.github.com"
           git add -A
