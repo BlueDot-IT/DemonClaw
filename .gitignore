@@ -1,5 +1,10 @@
 CHECKLIST_FULLSPEC.md
 
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+demonclaw.json
 
 # Build artifacts
 /target/

@@ -5,192 +5,151 @@
 # DemonClaw
 
 <p align="center">
-  <a href="https://github.com/jason-allen-oneal/DemonClaw/actions/workflows/ci.yml">
-    <img src="https://github.com/jason-allen-oneal/DemonClaw/actions/workflows/ci.yml/badge.svg" alt="CI" />
+  <a href="https://github.com/BlueDot-IT/DemonClaw/actions/workflows/ci.yml">
+    <img src="https://github.com/BlueDot-IT/DemonClaw/actions/workflows/ci.yml/badge.svg" alt="CI" />
   </a>
-  <a href="https://github.com/jason-allen-oneal/DemonClaw/actions/workflows/security.yml">
-    <img src="https://github.com/jason-allen-oneal/DemonClaw/actions/workflows/security.yml/badge.svg" alt="Security" />
+  <a href="https://github.com/BlueDot-IT/DemonClaw/actions/workflows/security.yml">
+    <img src="https://github.com/BlueDot-IT/DemonClaw/actions/workflows/security.yml/badge.svg" alt="Security" />
   </a>
-  <a href="https://github.com/jason-allen-oneal/DemonClaw/blob/main/LICENSE">
+  <a href="https://github.com/BlueDot-IT/DemonClaw/blob/main/LICENSE">
     <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT" />
   </a>
   <a href="https://www.rust-lang.org">
     <img src="https://img.shields.io/badge/rust-stable-orange.svg" alt="Rust" />
   </a>
-  <a href="https://github.com/jason-allen-oneal/DemonClaw/releases">
+  <a href="https://github.com/BlueDot-IT/DemonClaw/releases/tag/v1.0.0">
     <img src="https://img.shields.io/badge/release-v1.0.0-blue.svg" alt="Release v1.0.0" />
   </a>
 </p>
 
-Purple-team agent runtime in Rust.
+DemonClaw is a Rust-native, security-focused agent runtime for controlled purple-team operations, defensive validation, and tamper-evident evidence collection.
 
-DemonClaw is a security-first autonomous agent framework built for purple-team operations, controlled execution, and tamper-evident evidence collection. It combines policy-gated orchestration, sandboxed WASM payloads, semantic routing, and persistent memory into a single Rust-native runtime.
+It combines policy-gated orchestration, capability-scoped WASM execution, semantic routing, persistent PostgreSQL and pgvector memory, and explicit approval boundaries. It is not intended to be an unsupervised offensive platform.
 
 ## Release status
 
-**Current state:** release / v1.0.0
+The current release is `v1.0.0`.
 
-Core spec coverage is in place:
-- SignalGate semantic routing
-- GhostMCP approval boundary
-- WASM sandbox + Payload Scanner
-- PostgreSQL + pgvector memory
-- Evidence Locker hash chain
-- AgentLoop orchestration
-- interval and basic cron scheduling
+Implemented runtime surfaces include:
+
+- SignalGate semantic routing with deterministic local fallback
+- GhostMCP approval checks for sensitive actions
+- WASM payload scanning and constrained execution
+- PostgreSQL and pgvector semantic memory
+- hash-linked Evidence Locker records
+- interval and five-field cron scheduling
+- active-defense command routing
+- HTTP ingestion, JSON APIs, SSE events, and a server-rendered dashboard
 - end-to-end acceptance coverage
-- **Web dashboard** with server-rendered UI, SSE live events, and operator controls
-
-## What DemonClaw is for
-
-DemonClaw is designed for:
-- enterprise vulnerability assessment
-- controlled adversarial simulation
-- infrastructure validation under explicit guardrails
-- evidence-backed defensive and purple-team workflows
-- agentic execution with scoped approvals and strong auditability
-
-DemonClaw is **not** positioned as an unsupervised offensive platform. The architecture assumes security boundaries, engagement scoping, and human approval for sensitive actions.
 
 ## Architecture
 
-Major subsystems:
-- **SignalGate**: semantic routing and intent classification
-- **GhostMCP**: authorization boundary and secret injection guardrail
-- **Payload Scanner**: pre-execution WASM validation
-- **Sandbox**: capability-gated payload execution with fuel/time limits
-- **MemoryManager**: PostgreSQL + pgvector retrieval and compaction
-- **Evidence Locker**: tamper-evident event chain
-- **Scheduler**: interval and cron-driven event injection
-- **AgentLoop**: orchestration core for routing, execution, and lifecycle events
-- **Web Dashboard**: server-rendered Tera templates with SSE live event stream
+The main subsystems are:
 
-See `SPEC.md` for the architecture spec and `CONFIG.md` for runtime configuration.
+- `Channels`: REPL and HTTP ingestion, dashboard routes, JSON APIs, body limits, optional token authentication, rate limiting, and SSE delivery
+- `AgentLoop`: intent routing, lifecycle state transitions, concurrency control, and evidence recording
+- `SignalGate`: local and upstream intent classification
+- `SecurityPolicy`: engagement, target, CIDR, domain, port, and tool-level controls
+- `GhostMCP`: approval and secret-injection boundary
+- `Payload Scanner`: pre-execution WASM validation
+- `Sandbox`: Wasmtime-based execution with capability, fuel, and timeout limits
+- `MemoryManager`: PostgreSQL, pgvector, full-text retrieval, and maintenance
+- `EvidenceLocker`: hash-linked audit records and chain verification
+- `Scheduler`: interval and cron-driven envelope injection
+- `Active Defense`: controlled scan, verification, and remediation workflows
 
-## Features
+See `SPEC.md` for the implemented architecture and security invariants. See `CONFIG.md` for runtime configuration.
 
-- **Envelope ingestion**
-  - REPL (stdin) ingestion
-  - HTTP ingest endpoint: `POST /ingest` (with rate limiting and constant-time auth)
-- **Web Dashboard** (`/dashboard/`)
-  - Dashboard with evidence stats, chain integrity, live event feed (SSE)
-  - Evidence chain viewer with verification status
-  - Security policy viewer
-  - Memory chunk search (hybrid vector + full-text)
-  - Payload management with one-click execution
-- **Routing**
-  - SignalGate intent classification (`Query`, `Command`, `AttackPayload`)
-  - deterministic local fallback for core directives
-- **Security controls**
-  - engagement context enforcement
-  - CIDR/domain allowlists
-  - blocked-port and tool-level controls
-  - rate limiting on ingest (60 req/min)
-  - constant-time token comparison
-- **GhostMCP approval boundary** for sensitive actions
-- **WASM sandbox** execution for payloads (`wasmtime` + `wasmtime-wasi`)
-- **Payload Scanner** for pre-execution import/operator/capability checks
-- **Semantic memory** using PostgreSQL + `pgvector`
-- **Evidence Locker** with hash-linked audit events
-- **Scheduler**
-  - interval jobs
-  - basic 5-field cron support (`*`, lists, ranges, steps)
-- **API endpoints**
-  - `GET /healthz` -- health check
-  - `GET /api/status` -- system status with evidence count and policy
-  - `GET /api/evidence` -- evidence events (JSON)
-  - `GET /api/evidence/verify` -- chain verification
-  - `GET /api/policy` -- current security policy
-  - `GET /api/events/stream` -- SSE live event stream
-  - `GET /api/memory/search?q=...` -- semantic memory search
-- **Acceptance coverage** including end-to-end payload -> evidence flow tests
+## HTTP surfaces
+
+The default listener is `0.0.0.0:3000`. Production deployments should enable ingest authentication and place the service behind an authenticated reverse proxy or a restricted network boundary.
+
+Key endpoints:
+
+- `POST /ingest`
+- `GET /healthz`
+- `GET /dashboard/`
+- `GET /api/status`
+- `GET /api/evidence`
+- `GET /api/evidence/verify`
+- `GET /api/policy`
+- `GET /api/events/stream`
+- `GET /api/memory/search?q=...`
 
 ## Quick start
 
-### 1) Start Postgres with pgvector
+### 1. Start PostgreSQL and pgvector
+
+Generate a development password in the current shell and start the database:
 
 ```bash
+export POSTGRES_PASSWORD="$(openssl rand -hex 32)"
 docker compose up -d
 ```
 
-Default DB is exposed on `localhost:5433`.
+The compose file binds PostgreSQL to `127.0.0.1:5433` only.
 
-### 2) Configure environment
-
-Create a `.env` file with at least:
+### 2. Configure the runtime
 
 ```bash
-DATABASE_URL=postgres://postgres:***@localhost:5433/demonclaw
+export DATABASE_URL="postgres://postgres:${POSTGRES_PASSWORD}@127.0.0.1:5433/demonclaw"
+export DEMONCLAW_INGEST_AUTH_ENABLED=1
+export DEMONCLAW_TOKEN="$(openssl rand -hex 32)"
 ```
 
-Optional but common:
+Provider credentials are optional unless the corresponding upstream feature is enabled:
 
 ```bash
-DEMONCLAW_HTTP_BIND=0.0.0.0:3000
-SIGNALGATE_API_KEY=...
-EMBEDDING_API_KEY=...
-GHOSTMCP_AUTO_APPROVE=0
+export SIGNALGATE_API_KEY="<provider credential>"
+export EMBEDDING_API_KEY="<provider credential>"
 ```
 
-### 3) Run DemonClaw
+Do not commit `.env` files or credentials. `.env.example` contains names and safe defaults only.
+
+### 3. Run DemonClaw
 
 ```bash
-cargo run
+cargo run --locked
 ```
 
-Behavior:
-- REPL starts automatically
-- HTTP server starts automatically (default `0.0.0.0:3000`)
-- Web dashboard available at `http://localhost:3000/dashboard/`
-- scheduler starts automatically
-- memory optimizer runs in the background when DB is available
-
-### 4) Send a test payload
+### 4. Send an authenticated envelope
 
 ```bash
 curl -s \
   -H 'content-type: application/json' \
-  -d '{"content":"payload:test_payload"}' \
-  http://localhost:3000/ingest
+  -H "x-demonclaw-token: ${DEMONCLAW_TOKEN}" \
+  -d '{"content":"memory:compact"}' \
+  http://127.0.0.1:3000/ingest
 ```
-
-Or use the web dashboard at `http://localhost:3000/dashboard/` -- the ingest form sends envelopes directly from the browser.
 
 ## Testing
 
 ```bash
-cargo test
+cargo fmt --all -- --check
+cargo clippy --locked --all-targets --all-features -- -D warnings
+cargo test --locked --all
+cargo audit --file Cargo.lock
 ```
 
-Notes:
-- DB-backed tests skip gracefully if Postgres is unavailable locally.
-- end-to-end acceptance coverage includes payload execution through AgentLoop and evidence recording.
-- CI runs format, clippy, and tests with a pgvector service container.
+Database-backed tests use the pgvector service in CI. Local tests that require PostgreSQL need a reachable `DATABASE_URL`.
 
-## Configuration
+## Security policy
 
-See `CONFIG.md` for supported environment variables and runtime behavior.
+Security-sensitive operations are expected to pass through engagement checks, policy validation, GhostMCP approval, payload scanning, sandbox limits, and evidence recording.
 
-## Release notes and checklists
+The repository uses one canonical cargo-audit policy at `.cargo/audit.toml`. Every advisory exception must be documented in `SECURITY_EXCEPTIONS.md`.
 
-- `CHANGELOG.md` - release notes
-- `RELEASE_CHECKLIST.md` - release prep and smoke checklist
-- `.github/SECURITY.md` - vulnerability reporting policy
+Report vulnerabilities privately according to `.github/SECURITY.md`.
 
-## Security
+## Release and maintenance files
 
-If you discover a vulnerability, do not file a public issue first. See `.github/SECURITY.md`.
-
-## CI/CD
-
-GitHub Actions included:
-- `ci.yml` for format, clippy, and test coverage
-- `security.yml` for audit and workflow linting
+- `CHANGELOG.md`: release history
+- `RELEASE_CHECKLIST.md`: release validation
+- `SECURITY_EXCEPTIONS.md`: reviewed dependency-advisory exceptions
+- `.github/workflows/release.yml`: idempotent publication of existing version tags
 
 ## License
 
-See `LICENSE`.
-
----
+DemonClaw is licensed under the MIT License. See `LICENSE`.
 
 Built by BlueDot IT.

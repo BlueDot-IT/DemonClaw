@@ -1,13 +1,17 @@
 services:
   db:
-    image: pgvector/pgvector:pg16
+    image: pgvector/pgvector@sha256:1d533553fefe4f12e5d80c7b80622ba0c382abb5758856f52983d8789179f0fb
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
       POSTGRES_DB: demonclaw
-    # Map to 5433 to avoid collision with a host Postgres already bound to 5432.
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d demonclaw"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
     volumes:
       - demonclaw_pgdata:/var/lib/postgresql/data
 

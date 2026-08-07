@@ -2,37 +2,59 @@ name: security
 
 on:
   push:
-    branches: [ main ]
+    branches: [main, org-sync, 'fix/**']
   pull_request:
-    branches: [ main ]
+    branches: [main, org-sync]
   schedule:
-    - cron: '0 7 * * 1' # Mondays 07:00 UTC
+    - cron: '0 7 * * 1'
+  workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   zizmor:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
       - name: Install zizmor
-        run: |
-          python3 -m pip install --upgrade pip
-          python3 -m pip install zizmor
-      - name: Scan workflows
-        run: |
-          zizmor .github/workflows || true
+        run: python3 -m pip install --disable-pip-version-check --no-input zizmor==1.29.0
+
+      - name: Scan GitHub Actions workflows
+        run: zizmor .github/workflows
 
   cargo-audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+
       - name: Install cargo-audit
-        run: cargo install cargo-audit --locked --version 0.22.1
-      - name: Audit
-        env:
-          RUSTSEC_ADVISORY_DB: ~/.cargo/advisory-db
+        run: cargo install cargo-audit --locked --version 0.22.2
+
+      - name: Verify the ignored RSA advisory is unreachable
+        shell: bash
         run: |
-          cargo audit --ignore RUSTSEC-2023-0071 --ignore RUSTSEC-2026-0097 --ignore RUSTSEC-2026-0114 --ignore RUSTSEC-2026-0104
+          set -euo pipefail
+          cargo tree --locked --edges normal,build,dev > dependency-tree.txt
+          if grep -Eq 'rsa v[0-9]' dependency-tree.txt; then
+            cat dependency-tree.txt
+            echo "::error::The ignored rsa advisory is reachable in the active dependency graph."
+            exit 1
+          fi
+
+      - name: Audit locked dependencies
+        run: cargo audit --file Cargo.lock
