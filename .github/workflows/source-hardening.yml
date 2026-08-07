@@ -491,16 +491,15 @@ jobs:
                   None => (None, trimmed),
               };
 
-              if let Some(user) = user {
-                  if user.is_empty()
+              if let Some(user) = user
+                  && (user.is_empty()
                       || user.len() > 64
                       || user.starts_with('-')
                       || !user
                           .bytes()
-                          .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
-                  {
-                      bail!("Invalid SSH user name");
-                  }
+                          .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-')))
+              {
+                  bail!("Invalid SSH user name");
               }
 
               validate_ssh_host(host)?;
