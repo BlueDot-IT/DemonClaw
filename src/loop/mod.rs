@@ -1,5 +1,6 @@
 use anyhow::Result;
 use serde_json::json;
+use sha2::{Digest, Sha256};
 use tokio::sync::{Semaphore, mpsc};
 use tracing::{error, info, info_span, warn};
 
@@ -15,6 +16,12 @@ use crate::{
     signalgate::{Intent, SignalGate},
     types::{Envelope, JobState},
 };
+
+fn sha256_hex(value: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(value);
+    format!("{:x}", hasher.finalize())
+}
 
 /// The core asynchronous agent loop.
 pub struct AgentLoop {
@@ -73,7 +80,11 @@ impl AgentLoop {
             self.record_job_state(
                 &env,
                 JobState::Received,
-                json!({"source": env.source, "content": env.content}),
+                json!({
+                    "source": env.source,
+                    "content_bytes": env.content.len(),
+                    "content_sha256": sha256_hex(env.content.as_bytes()),
+                }),
             )
             .await;
 
@@ -235,7 +246,7 @@ impl AgentLoop {
 
                         let manifest = Manifest {
                             can_http: vec![],
-                            can_exec: false,
+                            can_exec: vec![],
                         };
                         if let Err(e) = self.sandbox.run_payload(&wasm_bytes, &manifest) {
                             error!("Payload {} execution failed: {}", name, e);

@@ -7,7 +7,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use sqlx::{Pool, Postgres, Row};
-use tracing::{info, warn};
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use tracing::info;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -82,12 +84,16 @@ impl EvidenceEvent {
 #[derive(Clone)]
 pub struct EvidenceLocker {
     pool: Pool<Postgres>,
+    append_lock: Arc<Mutex<()>>,
 }
 
 impl EvidenceLocker {
     pub fn new(pool: Pool<Postgres>) -> Self {
         info!("Evidence Locker initialized.");
-        Self { pool }
+        Self {
+            pool,
+            append_lock: Arc::new(Mutex::new(())),
+        }
     }
 
     pub async fn init_schema(&self) -> Result<()> {
@@ -106,6 +112,16 @@ impl EvidenceLocker {
                 created_at TIMESTAMPTZ DEFAULT NOW()
             )
             "#,
+        )
+        .execute(&self.pool)
+        .await?;
+
+        sqlx::query("ALTER TABLE evidence_chain ADD COLUMN IF NOT EXISTS chain_seq BIGSERIAL")
+            .execute(&self.pool)
+            .await?;
+
+        sqlx::query(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_evidence_chain_seq ON evidence_chain(chain_seq)",
         )
         .execute(&self.pool)
         .await?;
@@ -132,7 +148,7 @@ impl EvidenceLocker {
 
     /// Get the latest hash in the chain (for linking next event)
     pub async fn get_latest_hash(&self) -> Result<Option<String>> {
-        let row = sqlx::query("SELECT hash FROM evidence_chain ORDER BY timestamp DESC LIMIT 1")
+        let row = sqlx::query("SELECT hash FROM evidence_chain ORDER BY chain_seq DESC LIMIT 1")
             .fetch_optional(&self.pool)
             .await?;
 
@@ -141,26 +157,29 @@ impl EvidenceLocker {
 
     /// Append a new event to the chain
     pub async fn append(&self, event: &EvidenceEvent) -> Result<()> {
-        // Verify the event's hash is valid before storing
+        let _guard = self.append_lock.lock().await;
+        self.append_locked(event).await
+    }
+
+    async fn append_locked(&self, event: &EvidenceEvent) -> Result<()> {
         if !event.verify_hash() {
             bail!("Evidence event hash verification failed");
         }
 
-        // Verify the prev_hash matches the actual latest hash
         let latest = self.get_latest_hash().await?;
         if latest != event.prev_hash {
-            warn!(
-                "Evidence chain fork detected: expected prev_hash={:?}, got prev_hash={:?}",
-                latest, event.prev_hash
+            bail!(
+                "Evidence chain fork rejected: expected prev_hash={:?}, got prev_hash={:?}",
+                latest,
+                event.prev_hash
             );
-            // Still append but log the warning - could be concurrent writes
         }
 
         sqlx::query(
             r#"
-            INSERT INTO evidence_chain (id, prev_hash, timestamp, kind, detail, envelope_id, hash)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
-            "#,
+        INSERT INTO evidence_chain (id, prev_hash, timestamp, kind, detail, envelope_id, hash)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        "#,
         )
         .bind(event.id)
         .bind(&event.prev_hash)
@@ -189,17 +208,17 @@ impl EvidenceLocker {
         detail: Value,
         envelope_id: Option<Uuid>,
     ) -> Result<EvidenceEvent> {
+        let _guard = self.append_lock.lock().await;
         let prev_hash = self.get_latest_hash().await?;
         let event = EvidenceEvent::new(Uuid::new_v4(), prev_hash, kind, detail, envelope_id);
-        self.append(&event).await?;
+        self.append_locked(&event).await?;
         Ok(event)
     }
-
     /// Verify the entire chain integrity
     pub async fn verify_chain(&self) -> Result<ChainVerification> {
         let rows = sqlx::query(
             "SELECT id, prev_hash, timestamp, kind, detail, envelope_id, hash
-             FROM evidence_chain ORDER BY timestamp ASC",
+             FROM evidence_chain ORDER BY chain_seq ASC",
         )
         .fetch_all(&self.pool)
         .await?;
@@ -257,7 +276,7 @@ impl EvidenceLocker {
     pub async fn query_all(&self, limit: i64) -> Result<Vec<EvidenceEvent>> {
         let rows = sqlx::query(
             "SELECT id, prev_hash, timestamp, kind, detail, envelope_id, hash
-             FROM evidence_chain ORDER BY timestamp DESC LIMIT $1",
+             FROM evidence_chain ORDER BY chain_seq DESC LIMIT $1",
         )
         .bind(limit)
         .fetch_all(&self.pool)
@@ -289,7 +308,7 @@ impl EvidenceLocker {
     pub async fn query_by_kind(&self, kind: &str, limit: i64) -> Result<Vec<EvidenceEvent>> {
         let rows = sqlx::query(
             "SELECT id, prev_hash, timestamp, kind, detail, envelope_id, hash
-             FROM evidence_chain WHERE kind = $1 ORDER BY timestamp DESC LIMIT $2",
+             FROM evidence_chain WHERE kind = $1 ORDER BY chain_seq DESC LIMIT $2",
         )
         .bind(kind)
         .bind(limit)
@@ -314,7 +333,7 @@ impl EvidenceLocker {
     pub async fn export_json(&self, limit: i64) -> Result<String> {
         let rows = sqlx::query(
             "SELECT id, prev_hash, timestamp, kind, detail, envelope_id, hash
-             FROM evidence_chain ORDER BY timestamp DESC LIMIT $1",
+             FROM evidence_chain ORDER BY chain_seq DESC LIMIT $1",
         )
         .bind(limit)
         .fetch_all(&self.pool)

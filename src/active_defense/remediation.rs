@@ -7,7 +7,11 @@ fn truncate(s: &str, max: usize) -> String {
     if s.len() <= max {
         return s.to_string();
     }
-    let mut out = s[..max].to_string();
+    let mut end = max.min(s.len());
+    while !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    let mut out = s[..end].to_string();
     out.push_str("\n…(truncated)…\n");
     out
 }
@@ -54,7 +58,7 @@ fn bool_from_env(name: &str, default: bool) -> bool {
 pub fn is_action_allowed(action: &RemediationAction) -> bool {
     match action {
         RemediationAction::AptUpgrade { .. } => {
-            bool_from_env("DEMONCLAW_REMEDIATE_ALLOW_APT_UPGRADE", true)
+            bool_from_env("DEMONCLAW_REMEDIATE_ALLOW_APT_UPGRADE", false)
         }
     }
 }
@@ -83,7 +87,7 @@ pub fn plan_remediation(target: Target) -> Result<RemediationPlan> {
     // Use `apt-get -s upgrade` to see if upgrades are available.
     let (code, out, err) = runner.run("apt-get", &["-s", "upgrade"])?;
 
-    let use_sudo = bool_from_env("DEMONCLAW_REMEDIATE_USE_SUDO", true);
+    let use_sudo = bool_from_env("DEMONCLAW_REMEDIATE_USE_SUDO", false);
 
     let mut notes = String::new();
     if code == -1 {

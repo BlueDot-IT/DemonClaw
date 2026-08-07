@@ -10,7 +10,7 @@ use tracing::info;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SecurityPolicy {
     /// Require engagement context for sensitive operations
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub require_engagement_context: bool,
 
     /// Current engagement ID (optional)
@@ -45,9 +45,9 @@ pub struct SecurityPolicy {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum ToolLevel {
+    #[default]
     Passive,
     Active,
-    #[default]
     Intrusive,
 }
 
@@ -56,7 +56,7 @@ impl ToolLevel {
         match s.to_ascii_lowercase().as_str() {
             "passive" => ToolLevel::Passive,
             "active" => ToolLevel::Active,
-            _ => ToolLevel::Intrusive,
+            _ => ToolLevel::Passive,
         }
     }
 }
@@ -76,14 +76,14 @@ fn default_max_ports() -> u16 {
 impl Default for SecurityPolicy {
     fn default() -> Self {
         Self {
-            require_engagement_context: false,
+            require_engagement_context: true,
             engagement_id: None,
             allow_private_only: true,
             allowed_cidrs: Vec::new(),
             blocked_ports: default_blocked_ports(),
             max_ports_per_scan: 256,
             allowed_domains: HashSet::new(),
-            max_tool_level: ToolLevel::Intrusive,
+            max_tool_level: ToolLevel::Passive,
         }
     }
 }

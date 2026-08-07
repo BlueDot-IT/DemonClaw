@@ -1,4 +1,5 @@
 use anyhow::{Result, bail};
+use std::net::IpAddr;
 use std::process::Command;
 
 use super::types::Target;
@@ -38,29 +39,100 @@ impl SshPolicy {
     }
 
     pub fn check_destination(&self, destination: &str) -> Result<()> {
+        let destination = validate_ssh_destination(destination)?;
         if self.allow_any {
             return Ok(());
         }
         if self.allowlist.is_empty() {
             bail!(
-                "SSH destination '{}' denied (no allowlist configured). Set DEMONCLAW_SSH_ALLOWLIST or DEMONCLAW_SSH_ALLOW_ANY=1",
+                "SSH destination '{}' denied because no allowlist is configured",
                 destination
             );
         }
 
-        let dest = destination.trim();
-        if self.allowlist.iter().any(|a| a == dest) {
+        if self.allowlist.iter().any(|entry| entry == destination) {
             return Ok(());
         }
 
-        // Also allowlist by host (strip user@ if present).
-        let host = dest.split('@').next_back().unwrap_or(dest);
-        if self.allowlist.iter().any(|a| a == host) {
+        let host = destination
+            .rsplit_once('@')
+            .map(|(_, host)| host)
+            .unwrap_or(destination);
+        if self.allowlist.iter().any(|entry| entry == host) {
             return Ok(());
         }
 
-        bail!("SSH destination '{}' not allowlisted", destination);
+        bail!("SSH destination '{}' is not allowlisted", destination)
     }
+}
+
+fn validate_ssh_destination(destination: &str) -> Result<&str> {
+    let trimmed = destination.trim();
+    if trimmed != destination || trimmed.is_empty() || trimmed.len() > 255 {
+        bail!("Invalid SSH destination");
+    }
+    if trimmed.starts_with('-')
+        || trimmed
+            .chars()
+            .any(|ch| ch.is_control() || ch.is_whitespace())
+    {
+        bail!("Invalid SSH destination syntax");
+    }
+
+    let (user, host) = match trimmed.rsplit_once('@') {
+        Some((user, host)) => (Some(user), host),
+        None => (None, trimmed),
+    };
+
+    if let Some(user) = user
+        && (user.is_empty()
+            || user.len() > 64
+            || user.starts_with('-')
+            || !user
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-')))
+    {
+        bail!("Invalid SSH user name");
+    }
+
+    validate_ssh_host(host)?;
+    Ok(trimmed)
+}
+
+fn validate_ssh_host(host: &str) -> Result<()> {
+    if host.is_empty() || host.starts_with('-') {
+        bail!("Invalid SSH host");
+    }
+
+    if let Some(inner) = host
+        .strip_prefix('[')
+        .and_then(|value| value.strip_suffix(']'))
+    {
+        inner
+            .parse::<IpAddr>()
+            .map_err(|_| anyhow::anyhow!("Invalid bracketed SSH IP address"))?;
+        return Ok(());
+    }
+    if host.parse::<IpAddr>().is_ok() {
+        return Ok(());
+    }
+    if host.contains(':') || host.len() > 253 {
+        bail!("Invalid SSH host");
+    }
+
+    for label in host.split('.') {
+        if label.is_empty()
+            || label.len() > 63
+            || label.starts_with('-')
+            || label.ends_with('-')
+            || !label
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+        {
+            bail!("Invalid SSH host name");
+        }
+    }
+    Ok(())
 }
 
 pub trait CommandRunner {
@@ -91,9 +163,6 @@ pub struct SshRunner {
 }
 
 fn shell_escape(s: &str) -> String {
-    // Single-quote shell escaping.
-    // abc -> 'abc'
-    // a'b -> 'a'"'"'b'
     let mut out = String::with_capacity(s.len() + 2);
     out.push('\'');
     for ch in s.chars() {
@@ -111,12 +180,10 @@ impl CommandRunner for SshRunner {
     fn run(&self, program: &str, args: &[&str]) -> Result<(i32, String, String)> {
         self.policy.check_destination(&self.destination)?;
 
-        // Encode as a single remote command string, with shell-escaped argv to avoid
-        // injection and preserve spaces/special characters.
         let mut remote = shell_escape(program);
-        for a in args {
+        for arg in args {
             remote.push(' ');
-            remote.push_str(&shell_escape(a));
+            remote.push_str(&shell_escape(arg));
         }
 
         let out = Command::new("ssh")
@@ -124,7 +191,10 @@ impl CommandRunner for SshRunner {
                 "-o",
                 "BatchMode=yes",
                 "-o",
-                "StrictHostKeyChecking=accept-new",
+                "StrictHostKeyChecking=yes",
+                "-o",
+                "IdentitiesOnly=yes",
+                "--",
                 &self.destination,
                 &remote,
             ])
@@ -160,5 +230,12 @@ mod tests {
         assert_eq!(shell_escape("abc"), "'abc'");
         assert_eq!(shell_escape("a'b"), "'a'\"'\"'b'");
         assert_eq!(shell_escape(""), "''");
+    }
+
+    #[test]
+    fn ssh_destination_validation_rejects_option_injection() {
+        assert!(validate_ssh_destination("root@10.0.0.5").is_ok());
+        assert!(validate_ssh_destination("-oProxyCommand=sh").is_err());
+        assert!(validate_ssh_destination("root@-oProxyCommand=sh").is_err());
     }
 }

@@ -11,6 +11,7 @@ use axum::{
     routing::{get, post},
 };
 use futures::Stream;
+use sha2::{Digest, Sha256};
 use std::{
     collections::HashMap,
     sync::{
@@ -125,7 +126,7 @@ impl Channels {
         }
     }
 
-    pub async fn run_http_server(self: Arc<Self>, addr: &str) {
+    pub async fn run_http_server(self: Arc<Self>, addr: &str) -> anyhow::Result<()> {
         let max_bytes = self.security.max_body_bytes;
         let assets_service = ServeDir::new("assets");
         let app = Router::new()
@@ -147,10 +148,9 @@ impl Channels {
             .with_state(self);
 
         info!("HTTP server listening on {}", addr);
-        let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-        if let Err(e) = axum::serve(listener, app).await {
-            error!("HTTP server error: {}", e);
-        }
+        let listener = tokio::net::TcpListener::bind(addr).await?;
+        axum::serve(listener, app).await?;
+        Ok(())
     }
 }
 
@@ -165,7 +165,7 @@ fn render_template(
         error!("Template render error for '{}': {}", name, e);
         (
             StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Template error: {}", e),
+            "Template rendering failed".to_string(),
         )
     })
 }
@@ -416,14 +416,19 @@ fn check_ingest_auth(
 
 /// Constant-time byte comparison to prevent timing side-channels.
 fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
-    if a.len() != b.len() {
-        return false;
+    let max_len = a.len().max(b.len());
+    let mut difference = a.len() ^ b.len();
+    for index in 0..max_len {
+        difference |=
+            usize::from(a.get(index).copied().unwrap_or(0) ^ b.get(index).copied().unwrap_or(0));
     }
-    let mut result = 0u8;
-    for (x, y) in a.iter().zip(b.iter()) {
-        result |= x ^ y;
-    }
-    result == 0
+    difference == 0
+}
+
+fn sha256_hex(value: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(value);
+    format!("{:x}", hasher.finalize())
 }
 
 async fn ingest_handler(
@@ -460,10 +465,11 @@ async fn ingest_handler(
 
     // Broadcast the ingest event to SSE subscribers
     let _ = state.event_tx.send(serde_json::json!({
-        "type": "envelope.received",
-        "id": env.id.to_string(),
-        "source": env.source,
-        "content": env.content,
+            "type": "envelope.received",
+            "id": env.id.to_string(),
+            "source": env.source,
+        "content_bytes": env.content.len(),
+        "content_sha256": sha256_hex(env.content.as_bytes()),
         "timestamp": env.received_at.to_rfc3339(),
     }));
 

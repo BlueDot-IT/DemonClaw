@@ -20,7 +20,7 @@ fn test_payload_wasm_path() -> String {
 
 fn test_db_url() -> String {
     std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5433/demonclaw".to_string())
+        .unwrap_or_else(|_| "postgres://postgres@localhost:5433/demonclaw".to_string())
 }
 
 #[tokio::test]
@@ -54,7 +54,11 @@ async fn e2e_payload_to_evidence_flow() -> anyhow::Result<()> {
     let ghostmcp = GhostMcp::new();
     let scanner = Scanner::new();
     let darkprompt = DarkPrompt::new();
-    let security = SecurityPolicy::default();
+    let security = SecurityPolicy {
+        require_engagement_context: true,
+        engagement_id: Some("test-engagement".to_string()),
+        ..SecurityPolicy::default()
+    };
 
     let mut agent_loop = AgentLoop::new(AgentLoopDeps {
         signalgate,

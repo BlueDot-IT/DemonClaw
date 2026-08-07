@@ -161,14 +161,14 @@ Security-sensitive command handlers are responsible for applying engagement, tar
 
 `POST /ingest` can require a token from a configurable header. The expected token is read from a named environment variable and compared in constant time.
 
-The default configuration leaves ingest authentication disabled. Production deployments must explicitly enable it:
+The default configuration enables ingest authentication and requires a non-empty runtime token. Production deployments must explicitly enable it:
 
 ```text
 DEMONCLAW_INGEST_AUTH_ENABLED=1
 DEMONCLAW_TOKEN=<runtime secret>
 ```
 
-The default listener is `0.0.0.0:3000`. Operators must restrict exposure when dashboard and read APIs are not protected by an upstream identity layer.
+The default listener is `127.0.0.1:3000`. Operators must restrict exposure when dashboard and read APIs are not protected by an upstream identity layer.
 
 ## 7. Security invariants
 
@@ -177,19 +177,20 @@ The implemented design intends to preserve these invariants:
 1. Sensitive execution is not performed without applicable engagement context.
 2. Targets and ports remain inside the configured operational scope.
 3. Protected actions pass through GhostMCP approval.
-4. WASM modules are scanned before sandbox execution.
-5. Payload capabilities do not exceed their manifest.
-6. Payload execution is bounded by concurrency and sandbox resource limits.
-7. Lifecycle outcomes are submitted to the evidence chain.
-8. Upstream LLM destinations satisfy configured URL restrictions.
-9. Provider credentials and runtime secrets are supplied at runtime, not committed to the repository.
-10. Dependency advisory exceptions are centralized and explicitly documented.
+4. Active-defense targets and tool levels are validated before command execution.
+5. WASM modules are scanned before sandbox execution.
+6. Payload HTTP destinations and executable names do not exceed explicit manifest allowlists.
+7. Payload execution is bounded by concurrency, guest-input, fuel, and enforced epoch limits.
+8. Lifecycle outcomes are serialized before insertion into the evidence chain, and chain forks are rejected.
+9. Upstream LLM destinations satisfy configured URL restrictions.
+10. Provider credentials and runtime secrets are supplied at runtime, not committed to the repository.
+11. Dependency advisory exceptions are centralized and explicitly documented.
 
 ## 8. Persistence and migrations
 
 SQLx migrations in `migrations/` create the pgvector memory schema. Evidence schema initialization is performed by the Evidence Locker.
 
-The runtime can enter a limited headless sandbox validation mode when PostgreSQL is unavailable. In that mode, persistent memory, evidence, HTTP channels, and normal AgentLoop operation are unavailable.
+Startup fails closed when PostgreSQL, pgvector migrations, or the Evidence Locker schema are unavailable. DemonClaw does not execute payloads as a database-failure fallback.
 
 ## 9. Build and verification
 

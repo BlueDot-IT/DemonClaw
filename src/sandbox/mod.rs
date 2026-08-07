@@ -10,6 +10,8 @@ use wasmtime::*;
 use wasmtime_wasi::WasiCtxBuilder;
 use wasmtime_wasi::p1::{WasiP1Ctx, add_to_linker_sync};
 
+const MAX_GUEST_STRING_BYTES: i32 = 64 * 1024;
+
 pub struct Sandbox {
     engine: Engine,
     /// Default fuel limit per payload (instructions)
@@ -21,7 +23,7 @@ pub struct Sandbox {
 #[derive(Clone, Debug)]
 pub struct Manifest {
     pub can_http: Vec<String>,
-    pub can_exec: bool,
+    pub can_exec: Vec<String>,
 }
 
 struct SandboxState {
@@ -40,6 +42,16 @@ impl Sandbox {
         config.epoch_interruption(true);
 
         let engine = Engine::new(&config)?;
+
+        let epoch_engine = engine.clone();
+        std::thread::Builder::new()
+            .name("demonclaw-wasmtime-epoch".to_string())
+            .spawn(move || {
+                loop {
+                    std::thread::sleep(Duration::from_secs(1));
+                    epoch_engine.increment_epoch();
+                }
+            })?;
 
         // Default limits (can be overridden via env vars)
         let default_fuel = std::env::var("DEMONCLAW_SANDBOX_FUEL_LIMIT")
@@ -80,7 +92,7 @@ impl Sandbox {
         info!("Fuel limit set: {} instructions", self.default_fuel);
 
         // Apply timeout via epoch interruption
-        store.set_epoch_deadline(self.default_timeout.as_secs());
+        store.set_epoch_deadline(self.default_timeout.as_secs().max(1));
         info!("Timeout set: {} seconds", self.default_timeout.as_secs());
 
         let mut linker = Linker::new(&self.engine);
@@ -181,6 +193,13 @@ fn read_guest_string(caller: &mut Caller<'_, SandboxState>, ptr: i32, len: i32) 
     if ptr < 0 || len < 0 {
         bail!("Guest provided negative pointer or length");
     }
+    if len > MAX_GUEST_STRING_BYTES {
+        bail!(
+            "Guest string exceeds maximum size: {} > {}",
+            len,
+            MAX_GUEST_STRING_BYTES
+        );
+    }
 
     let memory = caller
         .get_export("memory")
@@ -201,7 +220,7 @@ fn validate_manifest_requests(wasm_bytes: &[u8], manifest: &Manifest) -> Result<
                     ("env", "http_request") if manifest.can_http.is_empty() => {
                         bail!("Payload requests http capability, but manifest can_http is empty");
                     }
-                    ("env", "exec_command") if !manifest.can_exec => {
+                    ("env", "exec_command") if manifest.can_exec.is_empty() => {
                         bail!("Payload requests exec capability, but manifest can_exec is false");
                     }
                     ("env", "log" | "http_request" | "exec_command")
@@ -243,17 +262,28 @@ fn enforce_http_permission(manifest: &Manifest, request_target: &str) -> Result<
 }
 
 fn enforce_exec_permission(manifest: &Manifest, command: &str) -> Result<()> {
-    if !manifest.can_exec {
-        bail!("Process execution blocked: manifest can_exec is false");
+    if manifest.can_exec.is_empty() {
+        bail!("Process execution blocked: manifest has no executable allowlist entries");
     }
 
     if command.trim().is_empty() {
         bail!("Process execution blocked: empty command");
     }
 
-    let forbidden = ['|', '&', ';', '>', '<', '`', '$'];
+    let forbidden = ['|', '&', ';', '>', '<', '`', '$', '\n', '\r'];
     if command.chars().any(|c| forbidden.contains(&c)) {
         bail!("Process execution blocked: command contains forbidden shell meta characters");
+    }
+
+    let program = command
+        .split_whitespace()
+        .next()
+        .ok_or_else(|| anyhow!("Process execution blocked: empty command"))?;
+    if !manifest.can_exec.iter().any(|allowed| allowed == program) {
+        bail!(
+            "Process execution blocked: executable '{}' is not allowlisted",
+            program
+        );
     }
 
     Ok(())

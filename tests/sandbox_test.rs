@@ -12,11 +12,11 @@ fn test_sandbox_creation() {
 fn test_manifest_creation() {
     let manifest = Manifest {
         can_http: vec!["10.0.0.0/8".to_string()],
-        can_exec: false,
+        can_exec: vec![],
     };
 
     assert_eq!(manifest.can_http.len(), 1);
-    assert!(!manifest.can_exec);
+    assert!(manifest.can_exec.is_empty());
 }
 
 #[test]
@@ -24,7 +24,7 @@ fn test_empty_wasm_rejected() {
     let sandbox = Sandbox::new().unwrap();
     let manifest = Manifest {
         can_http: vec![],
-        can_exec: false,
+        can_exec: vec![],
     };
 
     // Empty wasm should fail

@@ -57,7 +57,10 @@ impl GhostMcp {
             env::var("GHOSTMCP_APPROVAL_TOKEN"),
             env::var("GHOSTMCP_HUMAN_TOKEN"),
         ) {
-            (Ok(expected), Ok(provided)) => !expected.trim().is_empty() && expected == provided,
+            (Ok(expected), Ok(provided)) => {
+                !expected.trim().is_empty()
+                    && constant_time_eq(expected.as_bytes(), provided.as_bytes())
+            }
             _ => false,
         };
 
@@ -171,6 +174,17 @@ impl GhostMcp {
     }
 }
 
+fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
+    let max_len = left.len().max(right.len());
+    let mut difference = left.len() ^ right.len();
+    for index in 0..max_len {
+        difference |= usize::from(
+            left.get(index).copied().unwrap_or(0) ^ right.get(index).copied().unwrap_or(0),
+        );
+    }
+    difference == 0
+}
+
 fn load_secrets_from_env() -> HashMap<String, String> {
     env::vars()
         .filter_map(|(key, value)| {
@@ -190,6 +204,7 @@ fn requires_human_approval(action_desc: &str) -> bool {
         "modify",
         "execute",
         "exploit",
+        "verify",
         "remediation",
     ]
     .iter()

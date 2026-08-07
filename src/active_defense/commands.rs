@@ -3,7 +3,10 @@ use serde_json::json;
 use tracing::info;
 
 use crate::{
-    evidence::EvidenceLocker, ghostmcp::GhostMcp, security::SecurityPolicy, types::Envelope,
+    evidence::EvidenceLocker,
+    ghostmcp::GhostMcp,
+    security::{SecurityPolicy, ToolLevel},
+    types::Envelope,
 };
 
 use super::{
@@ -49,6 +52,27 @@ fn has_flag(tokens: &[&str], flag: &str) -> bool {
     tokens.contains(&flag)
 }
 
+fn validate_target_scope(security: &SecurityPolicy, target: &Target) -> Result<()> {
+    let Target::Ssh { destination } = target else {
+        return Ok(());
+    };
+
+    let host = destination
+        .rsplit_once('@')
+        .map(|(_, host)| host)
+        .unwrap_or(destination);
+    let host = host
+        .strip_prefix('[')
+        .and_then(|value| value.strip_suffix(']'))
+        .unwrap_or(host);
+
+    if host.parse::<std::net::IpAddr>().is_err() {
+        security.validate_domain(host)?;
+    }
+    security.validate_target(host)?;
+    Ok(())
+}
+
 fn parse_active_defense_command(env: &Envelope) -> Option<ActiveDefenseCommand> {
     let content = env.content.trim();
     let parts: Vec<&str> = content.split_whitespace().collect();
@@ -84,8 +108,19 @@ pub async fn handle_active_defense_command(
         return Ok(false);
     };
 
+    let target = match &cmd {
+        ActiveDefenseCommand::Scan(request) => &request.target,
+        ActiveDefenseCommand::RemediatePlan { target }
+        | ActiveDefenseCommand::RemediateApply { target }
+        | ActiveDefenseCommand::Verify { target }
+        | ActiveDefenseCommand::DefendRun { target, .. } => target,
+    };
+    security.check_engagement_context("active_defense")?;
+    validate_target_scope(security, target)?;
+
     match cmd {
         ActiveDefenseCommand::Scan(req) => {
+            security.check_tool_level(ToolLevel::Passive)?;
             // Remote operations require explicit engagement context.
             if matches!(req.target, Target::Ssh { .. }) {
                 security.check_engagement_context("active_defense_remote_scan")?;
@@ -145,6 +180,7 @@ pub async fn handle_active_defense_command(
             Ok(true)
         }
         ActiveDefenseCommand::RemediatePlan { target } => {
+            security.check_tool_level(ToolLevel::Passive)?;
             if matches!(target, Target::Ssh { .. }) {
                 security.check_engagement_context("active_defense_remote_remediation_plan")?;
             }
@@ -170,6 +206,7 @@ pub async fn handle_active_defense_command(
             Ok(true)
         }
         ActiveDefenseCommand::RemediateApply { target } => {
+            security.check_tool_level(ToolLevel::Intrusive)?;
             if matches!(target, Target::Ssh { .. }) {
                 security.check_engagement_context("active_defense_remote_remediation_apply")?;
             }
@@ -226,6 +263,7 @@ pub async fn handle_active_defense_command(
             Ok(true)
         }
         ActiveDefenseCommand::Verify { target } => {
+            security.check_tool_level(ToolLevel::Passive)?;
             if matches!(target, Target::Ssh { .. }) {
                 security.check_engagement_context("active_defense_remote_verify")?;
             }
@@ -283,6 +321,11 @@ pub async fn handle_active_defense_command(
             Ok(true)
         }
         ActiveDefenseCommand::DefendRun { target, apply } => {
+            security.check_tool_level(if apply {
+                ToolLevel::Intrusive
+            } else {
+                ToolLevel::Passive
+            })?;
             if matches!(target, Target::Ssh { .. }) {
                 security.check_engagement_context("active_defense_remote_defend_run")?;
             }

@@ -10,6 +10,12 @@
 - consolidated cargo-audit policy into `.cargo/audit.toml`
 - removed obsolete advisory exceptions and documented the remaining lockfile-only exception
 - removed committed development database credentials from CI and Compose configuration
+- made startup fail closed when persistence or evidence initialization fails
+- enforced Wasmtime epoch deadlines and bounded guest-provided string allocations
+- restricted payload paths, SSH destinations, active-defense scope, and executable capabilities
+- serialized evidence appends and rejected chain forks
+- changed engagement, tool-level, HTTP bind, ingest-auth, and remediation defaults to fail-safe values
+- replaced raw envelope-content evidence and SSE broadcasts with hashes and byte counts
 
 ### Changed
 

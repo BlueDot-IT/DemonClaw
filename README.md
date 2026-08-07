@@ -52,7 +52,7 @@ The main subsystems are:
 - `SecurityPolicy`: engagement, target, CIDR, domain, port, and tool-level controls
 - `GhostMCP`: approval and secret-injection boundary
 - `Payload Scanner`: pre-execution WASM validation
-- `Sandbox`: Wasmtime-based execution with capability, fuel, and timeout limits
+- `Sandbox`: Wasmtime-based execution with explicit HTTP and executable allowlists, fuel limits, and enforced epoch timeouts
 - `MemoryManager`: PostgreSQL, pgvector, full-text retrieval, and maintenance
 - `EvidenceLocker`: hash-linked audit records and chain verification
 - `Scheduler`: interval and cron-driven envelope injection
@@ -62,7 +62,7 @@ See `SPEC.md` for the implemented architecture and security invariants. See `CON
 
 ## HTTP surfaces
 
-The default listener is `0.0.0.0:3000`. Production deployments should enable ingest authentication and place the service behind an authenticated reverse proxy or a restricted network boundary.
+The default listener is `127.0.0.1:3000`, and ingest authentication is enabled by default. Dashboard and read APIs still require an authenticated reverse proxy or another restricted deployment boundary when exposed remotely.
 
 Key endpoints:
 

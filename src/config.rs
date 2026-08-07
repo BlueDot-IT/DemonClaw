@@ -30,7 +30,7 @@ pub struct ServerConfig {
 }
 
 fn default_http_bind() -> String {
-    "0.0.0.0:3000".to_string()
+    "127.0.0.1:3000".to_string()
 }
 
 impl Default for ServerConfig {
@@ -43,7 +43,7 @@ impl Default for ServerConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SecurityConfig {
-    #[serde(default)]
+    #[serde(default = "default_ingest_auth_enabled")]
     pub ingest_auth_enabled: bool,
     #[serde(default = "default_ingest_header")]
     pub ingest_auth_header: String,
@@ -51,6 +51,10 @@ pub struct SecurityConfig {
     pub ingest_token_env: String,
     #[serde(default = "default_max_body_bytes")]
     pub max_body_bytes: usize,
+}
+
+fn default_ingest_auth_enabled() -> bool {
+    true
 }
 
 fn default_ingest_header() -> String {
@@ -68,7 +72,7 @@ fn default_max_body_bytes() -> usize {
 impl Default for SecurityConfig {
     fn default() -> Self {
         Self {
-            ingest_auth_enabled: false,
+            ingest_auth_enabled: true,
             ingest_auth_header: default_ingest_header(),
             ingest_token_env: default_ingest_token_env(),
             max_body_bytes: default_max_body_bytes(),

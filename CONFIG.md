@@ -9,19 +9,19 @@ Do not commit local configuration files or credentials. `.env`, `.env.*`, and `d
 | Variable | Default | Description |
 | --- | --- | --- |
 | `DEMONCLAW_CONFIG` | `demonclaw.json` | Optional JSON configuration path |
-| `DEMONCLAW_HTTP_BIND` | `0.0.0.0:3000` | HTTP listener address |
+| `DEMONCLAW_HTTP_BIND` | `127.0.0.1:3000` | HTTP listener address |
 | `DATABASE_URL` | `postgres://localhost/demonclaw` | PostgreSQL connection string |
 | `DEMONCLAW_EVENT_BUFFER` | `256` | Internal envelope channel capacity |
 | `DEMONCLAW_MAX_CONCURRENT_PAYLOADS` | `4` | Maximum simultaneous payload executions |
 | `DEMONCLAW_LOG_LEVEL` | `info` | `trace`, `debug`, `info`, `warn`, or `error` |
 
-The default HTTP bind exposes the listener on every interface. Use `127.0.0.1:3000`, an authenticated reverse proxy, or another restricted network boundary unless remote access is explicitly required.
+The default HTTP bind is loopback-only. Remote exposure requires an authenticated reverse proxy or another restricted network boundary.
 
 ## HTTP ingestion
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `DEMONCLAW_INGEST_AUTH_ENABLED` | `false` | Require a token for `POST /ingest` |
+| `DEMONCLAW_INGEST_AUTH_ENABLED` | `true` | Require a token for `POST /ingest` |
 | `DEMONCLAW_INGEST_AUTH_HEADER` | `x-demonclaw-token` | Header carrying the ingest token |
 | `DEMONCLAW_INGEST_TOKEN_ENV` | `DEMONCLAW_TOKEN` | Name of the environment variable containing the expected token |
 | `DEMONCLAW_MAX_BODY_BYTES` | `1000000` | Maximum request body size |
@@ -39,13 +39,13 @@ export DEMONCLAW_TOKEN="$(openssl rand -hex 32)"
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `DEMONCLAW_REQUIRE_ENGAGEMENT` | `false` | Require engagement context for protected operations |
+| `DEMONCLAW_REQUIRE_ENGAGEMENT` | `true` | Require engagement context for protected operations |
 | `DEMONCLAW_ENGAGEMENT_ID` | unset | Current engagement identifier |
 | `DEMONCLAW_ALLOW_PRIVATE_ONLY` | `true` | Restrict targets to private, loopback, and link-local addresses |
 | `DEMONCLAW_ALLOWED_CIDRS` | unset | Comma-separated CIDR allowlist |
 | `DEMONCLAW_BLOCKED_PORTS` | `22,2375,2376,3389` | Comma-separated blocked ports |
 | `DEMONCLAW_ALLOWED_DOMAINS` | unset | Comma-separated domain allowlist |
-| `DEMONCLAW_MAX_TOOL_LEVEL` | `intrusive` | Maximum level: `passive`, `active`, or `intrusive` |
+| `DEMONCLAW_MAX_TOOL_LEVEL` | `passive` | Maximum level: `passive`, `active`, or `intrusive` |
 
 For a new deployment, start with `DEMONCLAW_REQUIRE_ENGAGEMENT=1` and `DEMONCLAW_MAX_TOOL_LEVEL=passive`, then expand permissions deliberately.
 
@@ -79,7 +79,7 @@ When no embedding provider is configured, memory retrieval falls back to Postgre
 | Variable | Default | Description |
 | --- | --- | --- |
 | `DEMONCLAW_SANDBOX_FUEL_LIMIT` | `10000000` | Maximum Wasmtime fuel per payload |
-| `DEMONCLAW_SANDBOX_TIMEOUT_SECS` | `30` | Maximum payload execution time |
+| `DEMONCLAW_SANDBOX_TIMEOUT_SECS` | `30` | Maximum payload execution time enforced by a one-second epoch ticker |
 
 Payloads are scanned before execution and receive a capability manifest. Resource limits do not replace engagement, approval, or target policy.
 
@@ -116,8 +116,8 @@ Additional interval and cron jobs can be provided in the JSON configuration unde
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `DEMONCLAW_REMEDIATE_USE_SUDO` | `true` | Run supported remediation through non-interactive sudo |
-| `DEMONCLAW_REMEDIATE_ALLOW_APT_UPGRADE` | `true` | Permit supported apt upgrade actions after approval |
+| `DEMONCLAW_REMEDIATE_USE_SUDO` | `false` | Run supported remediation through non-interactive sudo |
+| `DEMONCLAW_REMEDIATE_ALLOW_APT_UPGRADE` | `false` | Permit supported apt upgrade actions after approval |
 
 Supported command families include:
 

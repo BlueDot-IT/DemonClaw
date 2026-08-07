@@ -7,7 +7,8 @@ fn test_default_policy() {
     let policy = SecurityPolicy::default();
     assert!(policy.allow_private_only);
     assert_eq!(policy.max_ports_per_scan, 256);
-    assert_eq!(policy.max_tool_level, ToolLevel::Intrusive);
+    assert_eq!(policy.max_tool_level, ToolLevel::Passive);
+    assert!(policy.require_engagement_context);
     assert!(policy.blocked_ports.contains(&22));
 }
 

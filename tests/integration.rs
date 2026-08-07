@@ -12,7 +12,7 @@ use demonclaw::{
 fn test_db_url() -> String {
     std::env::var("DATABASE_URL").unwrap_or_else(|_| {
         // Default to the docker pgvector instance we brought up.
-        "postgres://postgres:postgres@localhost:5433/demonclaw".to_string()
+        "postgres://postgres@localhost:5433/demonclaw".to_string()
     })
 }
 
@@ -135,28 +135,28 @@ fn sandbox_runs_payloads_with_expected_manifests() -> anyhow::Result<()> {
             "test_payload",
             Manifest {
                 can_http: vec![],
-                can_exec: false,
+                can_exec: vec![],
             },
         ),
         (
             "network_scanner",
             Manifest {
                 can_http: vec!["scan.demonclaw.local".to_string()],
-                can_exec: false,
+                can_exec: vec![],
             },
         ),
         (
             "web_enum",
             Manifest {
                 can_http: vec!["target.demonclaw.local".to_string()],
-                can_exec: false,
+                can_exec: vec![],
             },
         ),
         (
             "config_auditor",
             Manifest {
                 can_http: vec!["config.demonclaw.local".to_string()],
-                can_exec: true,
+                can_exec: vec!["echo".to_string()],
             },
         ),
     ];
