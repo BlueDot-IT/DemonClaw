@@ -35,6 +35,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
+          import re
           from pathlib import Path
 
           def read(path: str) -> str:
@@ -46,9 +47,22 @@ jobs:
           def replace_once(path: str, old: str, new: str) -> None:
               text = read(path)
               count = text.count(old)
-              if count != 1:
-                  raise RuntimeError(f"{path}: expected one match, found {count}: {old!r}")
-              write(path, text.replace(old, new, 1))
+              if count == 1:
+                  write(path, text.replace(old, new, 1))
+                  return
+              parts = re.split(r"(\s+)", old)
+              pattern = "".join(
+                  r"\s+" if part.isspace() else re.escape(part)
+                  for part in parts
+                  if part
+              )
+              matches = list(re.finditer(pattern, text, flags=re.MULTILINE))
+              if len(matches) != 1:
+                  raise RuntimeError(
+                      f"{path}: expected one semantic match, found {len(matches)}: {old!r}"
+                  )
+              match = matches[0]
+              write(path, text[:match.start()] + new + text[match.end():])
 
           def replace_all(path: str, old: str, new: str, minimum: int = 1) -> None:
               text = read(path)
