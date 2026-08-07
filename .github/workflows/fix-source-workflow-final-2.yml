@@ -1,0 +1,53 @@
+name: fix-final-source-hardening-escaping
+
+on:
+  push:
+    branches: ['fix/demonclaw-security-hygiene']
+    paths:
+      - .github/workflows/fix-source-workflow-final-2.yml
+
+permissions:
+  contents: read
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Correct assertion patch escaping
+        env:
+          ORG_SYNC_TOKEN: ${{ secrets.ORG_SYNC_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/workflows/source-hardening.yml')
+          lines = path.read_text(encoding='utf-8').splitlines()
+
+          old_matches = [i for i, line in enumerate(lines) if 'assert!(!manifest.can_exec)' in line]
+          new_matches = [i for i, line in enumerate(lines) if 'assert!(manifest.can_exec.is_empty())' in line]
+          if len(old_matches) != 1 or len(new_matches) != 1:
+              raise RuntimeError(
+                  f'unexpected assertion patch lines: old={len(old_matches)} new={len(new_matches)}'
+              )
+
+          lines[old_matches[0]] = r'              "    assert!(!manifest.can_exec);\n",'
+          lines[new_matches[0]] = r'              "    assert!(manifest.can_exec.is_empty());\n",'
+          path.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+          PY
+
+          rm -f .github/workflows/fix-source-workflow-final-2.yml
+          git config user.name "DemonClaw Security Fix"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "ci: correct sandbox assertion patch escaping"
+          test -n "$ORG_SYNC_TOKEN"
+          git remote set-url origin "https://x-access-token:${ORG_SYNC_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push origin HEAD:refs/heads/fix/demonclaw-security-hygiene
