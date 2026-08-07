@@ -857,7 +857,7 @@ jobs:
           replace_section(
               "src/channels/mod.rs",
               "fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {",
-              "\n}\n\nasync fn ingest_handler(",
+              "\n\nasync fn ingest_handler(",
               '''fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
               let max_len = a.len().max(b.len());
               let mut difference = a.len() ^ b.len();
