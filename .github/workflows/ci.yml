@@ -21,7 +21,7 @@ jobs:
         image: pgvector/pgvector:pg16
         env:
           POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
           POSTGRES_DB: demonclaw
         ports:
           - 5433:5432
@@ -32,7 +32,7 @@ jobs:
           --health-retries 20
 
     env:
-      DATABASE_URL: postgres://postgres:postgres@localhost:5433/demonclaw
+      DATABASE_URL: postgres://postgres@localhost:5433/demonclaw
       RUST_BACKTRACE: 1
 
     steps:
