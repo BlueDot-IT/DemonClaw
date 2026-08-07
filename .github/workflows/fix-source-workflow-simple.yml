@@ -1,0 +1,109 @@
+name: repair-source-hardening-context
+
+on:
+  push:
+    branches: ['fix/demonclaw-security-hygiene']
+    paths:
+      - .github/workflows/fix-source-workflow-simple.yml
+
+permissions:
+  contents: read
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Repair ambiguous patch guards
+        env:
+          ORG_SYNC_TOKEN: ${{ secrets.ORG_SYNC_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/workflows/source-hardening.yml')
+          lines = path.read_text(encoding='utf-8').splitlines()
+
+          rules = {
+              'ActiveDefenseCommand::Scan(req)': (
+                  'security.check_tool_level(ToolLevel::Passive)?;',
+                  '// Remote operations require explicit engagement context.',
+              ),
+              'ActiveDefenseCommand::RemediatePlan { target }': (
+                  'security.check_tool_level(ToolLevel::Passive)?;',
+                  'if matches!(target, Target::Ssh { .. }) {',
+              ),
+              'ActiveDefenseCommand::RemediateApply { target }': (
+                  'security.check_tool_level(ToolLevel::Intrusive)?;',
+                  'if matches!(target, Target::Ssh { .. }) {',
+              ),
+              'ActiveDefenseCommand::Verify { target }': (
+                  'security.check_tool_level(ToolLevel::Passive)?;',
+                  'if matches!(target, Target::Ssh { .. }) {',
+              ),
+          }
+
+          def append_context(line: str, context: str) -> str:
+              marker = r'\n",'
+              index = line.rfind(marker)
+              if index < 0:
+                  raise RuntimeError(f'missing string terminator in {line!r}')
+              return line[:index] + r'\n            ' + context + marker + line[index + len(marker):]
+
+          for signature, (check, context) in rules.items():
+              candidates = [
+                  index for index, line in enumerate(lines)
+                  if signature in line and line.lstrip().startswith('"')
+              ]
+              if len(candidates) != 2:
+                  raise RuntimeError(f'{signature}: expected two quoted patch lines, found {len(candidates)}')
+              old_index, new_index = candidates
+              if check in lines[old_index] or check not in lines[new_index]:
+                  raise RuntimeError(f'{signature}: unexpected patch-line ordering')
+              lines[old_index] = append_context(lines[old_index], context)
+              lines[new_index] = append_context(lines[new_index], context)
+
+          signature = 'ActiveDefenseCommand::DefendRun { target, apply }'
+          candidates = [
+              index for index, line in enumerate(lines)
+              if signature in line and line.lstrip().startswith('"')
+          ]
+          if len(candidates) != 1:
+              raise RuntimeError(f'{signature}: expected one quoted patch line, found {len(candidates)}')
+          defend_old = candidates[0]
+          lines[defend_old] = append_context(
+              lines[defend_old],
+              'if matches!(target, Target::Ssh { .. }) {',
+          )
+
+          replacement_start = next(
+              index for index in range(defend_old + 1, len(lines))
+              if 'security.check_tool_level(if apply {' in lines[index]
+          )
+          insertion_point = next(
+              index for index in range(replacement_start + 1, len(lines))
+              if lines[index].strip() == '})?;'
+          ) + 1
+          indent = lines[insertion_point - 1][:-len(lines[insertion_point - 1].lstrip())]
+          lines.insert(
+              insertion_point,
+              indent + 'if matches!(target, Target::Ssh { .. }) {',
+          )
+
+          path.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+          PY
+
+          rm -f .github/workflows/fix-source-workflow-2.yml
+          rm -f .github/workflows/fix-source-workflow-simple.yml
+          git config user.name "DemonClaw Security Fix"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "ci: repair source hardening context guards"
+          git remote set-url origin "https://x-access-token:${ORG_SYNC_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push origin HEAD:refs/heads/fix/demonclaw-security-hygiene
