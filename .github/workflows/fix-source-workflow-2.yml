@@ -1,0 +1,124 @@
+name: disambiguate-source-hardening
+
+on:
+  push:
+    branches: ['fix/demonclaw-security-hygiene']
+    paths:
+      - .github/workflows/fix-source-workflow-2.yml
+
+permissions:
+  contents: read
+
+jobs:
+  correct:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Make active-defense patches context-specific
+        env:
+          ORG_SYNC_TOKEN: ${{ secrets.ORG_SYNC_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/workflows/source-hardening.yml')
+          text = path.read_text(encoding='utf-8')
+
+          replacements = [
+              (
+                  r'''          replace_once(
+              "src/active_defense/commands.rs",
+              "        ActiveDefenseCommand::Scan(req) => {\n",
+              "        ActiveDefenseCommand::Scan(req) => {\n            security.check_tool_level(ToolLevel::Passive)?;\n",
+          )''',
+                  r'''          replace_once(
+              "src/active_defense/commands.rs",
+              "        ActiveDefenseCommand::Scan(req) => {\n            // Remote operations require explicit engagement context.\n",
+              "        ActiveDefenseCommand::Scan(req) => {\n            security.check_tool_level(ToolLevel::Passive)?;\n            // Remote operations require explicit engagement context.\n",
+          )''',
+              ),
+              (
+                  r'''          replace_once(
+              "src/active_defense/commands.rs",
+              "        ActiveDefenseCommand::RemediatePlan { target } => {\n",
+              "        ActiveDefenseCommand::RemediatePlan { target } => {\n            security.check_tool_level(ToolLevel::Passive)?;\n",
+          )''',
+                  r'''          replace_once(
+              "src/active_defense/commands.rs",
+              "        ActiveDefenseCommand::RemediatePlan { target } => {\n            if matches!(target, Target::Ssh { .. }) {\n",
+              "        ActiveDefenseCommand::RemediatePlan { target } => {\n            security.check_tool_level(ToolLevel::Passive)?;\n            if matches!(target, Target::Ssh { .. }) {\n",
+          )''',
+              ),
+              (
+                  r'''          replace_once(
+              "src/active_defense/commands.rs",
+              "        ActiveDefenseCommand::RemediateApply { target } => {\n",
+              "        ActiveDefenseCommand::RemediateApply { target } => {\n            security.check_tool_level(ToolLevel::Intrusive)?;\n",
+          )''',
+                  r'''          replace_once(
+              "src/active_defense/commands.rs",
+              "        ActiveDefenseCommand::RemediateApply { target } => {\n            if matches!(target, Target::Ssh { .. }) {\n",
+              "        ActiveDefenseCommand::RemediateApply { target } => {\n            security.check_tool_level(ToolLevel::Intrusive)?;\n            if matches!(target, Target::Ssh { .. }) {\n",
+          )''',
+              ),
+              (
+                  r'''          replace_once(
+              "src/active_defense/commands.rs",
+              "        ActiveDefenseCommand::Verify { target } => {\n",
+              "        ActiveDefenseCommand::Verify { target } => {\n            security.check_tool_level(ToolLevel::Passive)?;\n",
+          )''',
+                  r'''          replace_once(
+              "src/active_defense/commands.rs",
+              "        ActiveDefenseCommand::Verify { target } => {\n            if matches!(target, Target::Ssh { .. }) {\n",
+              "        ActiveDefenseCommand::Verify { target } => {\n            security.check_tool_level(ToolLevel::Passive)?;\n            if matches!(target, Target::Ssh { .. }) {\n",
+          )''',
+              ),
+              (
+                  r'''          replace_once(
+              "src/active_defense/commands.rs",
+              "        ActiveDefenseCommand::DefendRun { target, apply } => {\n",
+              '''        ActiveDefenseCommand::DefendRun { target, apply } => {
+              security.check_tool_level(if apply {
+                  ToolLevel::Intrusive
+              } else {
+                  ToolLevel::Passive
+              })?;
+          '''.replace("          ", ""),
+          )''',
+                  r'''          replace_once(
+              "src/active_defense/commands.rs",
+              "        ActiveDefenseCommand::DefendRun { target, apply } => {\n            if matches!(target, Target::Ssh { .. }) {\n",
+              '''        ActiveDefenseCommand::DefendRun { target, apply } => {
+              security.check_tool_level(if apply {
+                  ToolLevel::Intrusive
+              } else {
+                  ToolLevel::Passive
+              })?;
+              if matches!(target, Target::Ssh { .. }) {
+          '''.replace("          ", ""),
+          )''',
+              ),
+          ]
+
+          for old, new in replacements:
+              count = text.count(old)
+              if count != 1:
+                  raise RuntimeError(f'expected one workflow patch block, found {count}: {old[:120]!r}')
+              text = text.replace(old, new, 1)
+
+          path.write_text(text, encoding='utf-8')
+          PY
+
+          rm .github/workflows/fix-source-workflow-2.yml
+          git config user.name "DemonClaw Security Fix"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "ci: disambiguate active-defense hardening patches"
+          git remote set-url origin "https://x-access-token:${ORG_SYNC_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push origin HEAD:refs/heads/fix/demonclaw-security-hygiene
