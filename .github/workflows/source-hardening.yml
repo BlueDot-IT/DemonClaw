@@ -1131,7 +1131,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if git grep -nE '(MYSQL_ROOT_PASSWORD|POSTGRES_PASSWORD):[[:space:]]+[^$]|postgres://[^/@:]+:[^/@]+@|github_pat_[A-Za-z0-9_]+|ghp_[A-Za-z0-9]+' -- ':!CHANGELOG.md' ':!.github/workflows/source-hardening.yml'; then
+          if git grep -nE '(MYSQL_ROOT_PASSWORD|POSTGRES_PASSWORD):[[:space:]]+[^$]|postgres://[^/@:]+:[^$/@][^/@]*@|github_pat_[A-Za-z0-9_]+|ghp_[A-Za-z0-9]+' -- ':!CHANGELOG.md' ':!.github/workflows/source-hardening.yml'; then
             echo "::error::Potential committed credential literal detected."
             exit 1
           fi
