@@ -118,6 +118,8 @@ Additional interval and cron jobs can be provided in the JSON configuration unde
 | --- | --- | --- |
 | `DEMONCLAW_REMEDIATE_USE_SUDO` | `false` | Run supported remediation through non-interactive sudo |
 | `DEMONCLAW_REMEDIATE_ALLOW_APT_UPGRADE` | `false` | Permit supported apt upgrade actions after approval |
+| `DEMONCLAW_REMEDIATE_AUTO` | `false` | Permit scheduled drift checks to request automatic remediation |
+| `DEMONCLAW_REMEDIATE_MAINTENANCE_WINDOW_UTC` | unset | Required UTC window for automatic remediation, formatted `HH:MM-HH:MM` |
 
 Supported command families include:
 
@@ -125,10 +127,31 @@ Supported command families include:
 - `scan:intrusion`
 - `verify`
 - `defend:run`
+- `defend:baseline`
+- `defend:drift`
 - `remediate:plan`
 - `remediate:apply`
 
 Remote operations must remain inside the configured engagement and SSH scope. Verification and remediation actions are GhostMCP-gated where implemented.
+
+Phase 3 drift monitoring reuses `runtime.scheduler_jobs`. Establish a reviewed baseline with `defend:baseline`, then schedule `defend:drift` as an interval or cron job. A scheduled `defend:drift --apply` remains fail-closed unless all of the following are true: the runtime permits intrusive tools, `DEMONCLAW_REMEDIATE_AUTO=1`, the current UTC time is inside `DEMONCLAW_REMEDIATE_MAINTENANCE_WINDOW_UTC`, GhostMCP approves `remediation:auto_apply`, and the individual remediation action is allowlisted.
+
+Example polling job:
+
+```json
+{
+  "runtime": {
+    "scheduler_jobs": [
+      {
+        "name": "active-defense-drift",
+        "content": "defend:drift --target local",
+        "source": "scheduler",
+        "interval_secs": 300
+      }
+    ]
+  }
+}
+```
 
 ## Local PostgreSQL and pgvector
 

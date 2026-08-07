@@ -1,6 +1,7 @@
 pub mod commands;
 pub mod finders;
 pub mod findings;
+pub mod monitor;
 pub mod probes;
 pub mod remediation;
 pub mod runner;

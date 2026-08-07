@@ -11,8 +11,11 @@ use crate::{
 
 use super::{
     finders::{detect_intrusion_findings, detect_vuln_findings},
+    monitor::{capture_baseline, evaluate_drift},
     probes::run_probe,
-    remediation::{apply_action, is_action_allowed, plan_remediation},
+    remediation::{
+        apply_action, auto_remediation_allowed_now, is_action_allowed, plan_remediation,
+    },
     types::{ProbeKind, ScanKind, ScanRequest, Target},
     verify::{evidence_payload_for_findings, evidence_payload_for_verifications, run_verify},
 };
@@ -23,6 +26,8 @@ enum ActiveDefenseCommand {
     RemediatePlan { target: Target },
     RemediateApply { target: Target },
     Verify { target: Target },
+    Baseline { target: Target },
+    Drift { target: Target, apply: bool },
     DefendRun { target: Target, apply: bool },
 }
 
@@ -93,6 +98,8 @@ fn parse_active_defense_command(env: &Envelope) -> Option<ActiveDefenseCommand> 
         "remediate:plan" => Some(ActiveDefenseCommand::RemediatePlan { target }),
         "remediate:apply" => Some(ActiveDefenseCommand::RemediateApply { target }),
         "verify" => Some(ActiveDefenseCommand::Verify { target }),
+        "defend:baseline" => Some(ActiveDefenseCommand::Baseline { target }),
+        "defend:drift" => Some(ActiveDefenseCommand::Drift { target, apply }),
         "defend:run" => Some(ActiveDefenseCommand::DefendRun { target, apply }),
         _ => None,
     }
@@ -113,6 +120,8 @@ pub async fn handle_active_defense_command(
         ActiveDefenseCommand::RemediatePlan { target }
         | ActiveDefenseCommand::RemediateApply { target }
         | ActiveDefenseCommand::Verify { target }
+        | ActiveDefenseCommand::Baseline { target }
+        | ActiveDefenseCommand::Drift { target, .. }
         | ActiveDefenseCommand::DefendRun { target, .. } => target,
     };
     security.check_engagement_context("active_defense")?;
@@ -317,6 +326,122 @@ pub async fn handle_active_defense_command(
                     Some(env.id),
                 )
                 .await?;
+
+            Ok(true)
+        }
+        ActiveDefenseCommand::Baseline { target } => {
+            security.check_tool_level(ToolLevel::Passive)?;
+            if matches!(target, Target::Ssh { .. }) {
+                security.check_engagement_context("active_defense_remote_baseline")?;
+            }
+
+            let snapshot = capture_baseline(target.clone(), evidence, Some(env.id)).await?;
+            evidence
+                .record(
+                    "active_defense.baseline.completed",
+                    json!({"target": target, "finding_count": snapshot.signatures.len()}),
+                    Some(env.id),
+                )
+                .await?;
+            Ok(true)
+        }
+        ActiveDefenseCommand::Drift { target, apply } => {
+            security.check_tool_level(if apply {
+                ToolLevel::Intrusive
+            } else {
+                ToolLevel::Passive
+            })?;
+            if matches!(target, Target::Ssh { .. }) {
+                security.check_engagement_context("active_defense_remote_drift")?;
+            }
+
+            evidence
+                .record(
+                    "active_defense.drift.started",
+                    json!({"target": target, "apply": apply}),
+                    Some(env.id),
+                )
+                .await?;
+
+            let Some(report) = evaluate_drift(target.clone(), evidence).await? else {
+                let snapshot = capture_baseline(target.clone(), evidence, Some(env.id)).await?;
+                evidence
+                    .record(
+                        "active_defense.drift.baseline_initialized",
+                        json!({"target": target, "finding_count": snapshot.signatures.len()}),
+                        Some(env.id),
+                    )
+                    .await?;
+                return Ok(true);
+            };
+
+            let has_added = !report.added.is_empty();
+            evidence
+                .record(
+                    "active_defense.drift.completed",
+                    json!({"report": &report}),
+                    Some(env.id),
+                )
+                .await?;
+
+            if apply && has_added {
+                if !auto_remediation_allowed_now() {
+                    evidence
+                        .record(
+                            "active_defense.remediation.auto.denied",
+                            json!({
+                                "target": target,
+                                "reason": "automatic remediation is disabled or outside the configured UTC maintenance window"
+                            }),
+                            Some(env.id),
+                        )
+                        .await?;
+                    return Ok(true);
+                }
+
+                let approved = ghostmcp
+                    .authorize_action("remediation:auto_apply")
+                    .await
+                    .unwrap_or(false);
+                if !approved {
+                    evidence
+                        .record(
+                            "active_defense.remediation.auto.denied",
+                            json!({"target": target, "reason": "ghostmcp denied"}),
+                            Some(env.id),
+                        )
+                        .await?;
+                    return Ok(true);
+                }
+
+                let plan = plan_remediation(target.clone())?;
+                let mut results = Vec::new();
+                for action in plan.actions {
+                    if !is_action_allowed(&action) {
+                        evidence
+                            .record(
+                                "active_defense.remediation.auto.denied",
+                                json!({
+                                    "target": target,
+                                    "reason": "action not allowed by policy",
+                                    "action": action
+                                }),
+                                Some(env.id),
+                            )
+                            .await?;
+                        continue;
+                    }
+                    results.push(apply_action(target.clone(), action)?);
+                }
+
+                evidence
+                    .record(
+                        "active_defense.remediation.auto.completed",
+                        json!({"target": target, "results": results}),
+                        Some(env.id),
+                    )
+                    .await?;
+            }
 
             Ok(true)
         }

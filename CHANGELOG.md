@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Added
+
+- Active Defense Phase 3 baselines and drift detection backed by tamper-evident evidence events
+- scheduler-driven `defend:drift` monitoring and guarded `--apply` auto-remediation
+- fail-closed UTC maintenance windows for automatic remediation
+
 ### Security
 
 - upgraded `wasmtime` and `wasmtime-wasi` to the patched 46.0.2 release line

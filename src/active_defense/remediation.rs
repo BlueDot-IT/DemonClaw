@@ -1,4 +1,5 @@
 use anyhow::Result;
+use chrono::{NaiveTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use super::{finders::detect_vuln_findings, runner::runner_for_target, types::Target};
@@ -60,6 +61,36 @@ pub fn is_action_allowed(action: &RemediationAction) -> bool {
         RemediationAction::AptUpgrade { .. } => {
             bool_from_env("DEMONCLAW_REMEDIATE_ALLOW_APT_UPGRADE", false)
         }
+    }
+}
+
+fn parse_maintenance_window(value: &str) -> Option<(NaiveTime, NaiveTime)> {
+    let (start, end) = value.trim().split_once('-')?;
+    let start = NaiveTime::parse_from_str(start.trim(), "%H:%M").ok()?;
+    let end = NaiveTime::parse_from_str(end.trim(), "%H:%M").ok()?;
+    if start == end {
+        return None;
+    }
+    Some((start, end))
+}
+
+pub fn auto_remediation_allowed_now() -> bool {
+    if !bool_from_env("DEMONCLAW_REMEDIATE_AUTO", false) {
+        return false;
+    }
+
+    let Ok(raw_window) = std::env::var("DEMONCLAW_REMEDIATE_MAINTENANCE_WINDOW_UTC") else {
+        return false;
+    };
+    let Some((start, end)) = parse_maintenance_window(&raw_window) else {
+        return false;
+    };
+
+    let now = Utc::now().time();
+    if start < end {
+        now >= start && now < end
+    } else {
+        now >= start || now < end
     }
 }
 

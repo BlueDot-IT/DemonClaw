@@ -130,6 +130,10 @@ Status (implemented skeleton):
 
 ### Phase 3
 
-- continuous intrusion monitoring (polling and/or streaming)
-- stateful baselines and drift detection
-- auto-remediation allowlists + maintenance windows
+Implemented:
+
+- scheduler-driven continuous polling through `defend:drift`
+- persistent, tamper-evident baselines stored in Evidence Locker with `defend:baseline`
+- drift reports separating newly observed, resolved, and unchanged findings
+- optional `defend:drift --apply` auto-remediation with fail-closed maintenance windows
+- automatic remediation still requires intrusive tool permission, GhostMCP approval, and the existing per-action allowlist
