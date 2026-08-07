@@ -1,0 +1,68 @@
+name: align-source-hardening-spec
+
+on:
+  push:
+    branches: ['fix/demonclaw-security-hygiene']
+    paths:
+      - .github/workflows/fix-source-workflow-spec.yml
+
+permissions:
+  contents: read
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Align specification patch and clean helper workflows
+        env:
+          ORG_SYNC_TOKEN: ${{ secrets.ORG_SYNC_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/workflows/source-hardening.yml')
+          text = path.read_text(encoding='utf-8')
+
+          replacements = [
+              (
+                  r'''              "4. Protected actions pass through GhostMCP approval.\n5. WASM modules are scanned before sandbox execution.\n6. Payload capabilities do not exceed their manifest.\n7. Payload execution is bounded by concurrency and sandbox resource limits.\n",
+              "4. Protected actions pass through GhostMCP approval.\n5. Active-defense targets and tool levels are validated before command execution.\n6. WASM modules are scanned before sandbox execution.\n7. Payload HTTP destinations and executable names do not exceed explicit manifest allowlists.\n8. Payload execution is bounded by concurrency, guest-input, fuel, and enforced epoch limits.\n",''',
+                  r'''              "3. Protected actions pass through GhostMCP approval.\n4. WASM modules are scanned before sandbox execution.\n5. Payload capabilities do not exceed their manifest.\n6. Payload execution is bounded by concurrency and sandbox resource limits.\n",
+              "3. Protected actions pass through GhostMCP approval.\n4. Active-defense targets and tool levels are validated before command execution.\n5. WASM modules are scanned before sandbox execution.\n6. Payload HTTP destinations and executable names do not exceed explicit manifest allowlists.\n7. Payload execution is bounded by concurrency, guest-input, fuel, and enforced epoch limits.\n",''',
+              ),
+              (
+                  r'''              "8. Lifecycle outcomes are submitted to the evidence chain.\n9. Upstream LLM destinations satisfy configured URL restrictions.\n10. Provider credentials and runtime secrets are supplied at runtime, not committed to the repository.\n11. Dependency advisory exceptions are centralized and explicitly documented.\n",
+              "9. Lifecycle outcomes are serialized before insertion into the evidence chain, and chain forks are rejected.\n10. Upstream LLM destinations satisfy configured URL restrictions.\n11. Provider credentials and runtime secrets are supplied at runtime, not committed to the repository.\n12. Dependency advisory exceptions are centralized and explicitly documented.\n",''',
+                  r'''              "7. Lifecycle outcomes are submitted to the evidence chain.\n8. Upstream LLM destinations satisfy configured URL restrictions.\n9. Provider credentials and runtime secrets are supplied at runtime, not committed to the repository.\n10. Dependency advisory exceptions are centralized and explicitly documented.\n",
+              "8. Lifecycle outcomes are serialized before insertion into the evidence chain, and chain forks are rejected.\n9. Upstream LLM destinations satisfy configured URL restrictions.\n10. Provider credentials and runtime secrets are supplied at runtime, not committed to the repository.\n11. Dependency advisory exceptions are centralized and explicitly documented.\n",''',
+              ),
+              (
+                  '          rm -f .github/workflows/source-hardening.yml .github/workflows/lockfile-refresh.yml\n',
+                  '          rm -f .github/workflows/source-hardening.yml .github/workflows/lockfile-refresh.yml .github/workflows/fix-source-workflow-*.yml\n',
+              ),
+          ]
+
+          for old, new in replacements:
+              count = text.count(old)
+              if count != 1:
+                  raise RuntimeError(f'expected one replacement target, found {count}: {old[:120]!r}')
+              text = text.replace(old, new, 1)
+
+          path.write_text(text, encoding='utf-8')
+          PY
+
+          rm -f .github/workflows/fix-source-workflow-3.yml
+          rm -f .github/workflows/fix-source-workflow-spec.yml
+          git config user.name "DemonClaw Security Fix"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "ci: align source hardening with current spec"
+          git remote set-url origin "https://x-access-token:${ORG_SYNC_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push origin HEAD:refs/heads/fix/demonclaw-security-hygiene
