@@ -52,7 +52,9 @@ jobs:
                   return
               parts = re.split(r"(\s+)", old)
               pattern = "".join(
-                  r"\s+" if part.isspace() else re.escape(part)
+                  (
+    r"\s+" if "\n" in part or "\r" in part else r"[ \t]+"
+) if part.isspace() else re.escape(part)
                   for part in parts
                   if part
               )
