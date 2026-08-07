@@ -29,6 +29,8 @@ jobs:
         with:
           components: clippy, rustfmt
           targets: wasm32-wasip1
+      - name: Restore Rust cache
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
       - name: Apply source-level hardening
         shell: bash
@@ -1022,6 +1024,11 @@ jobs:
           replace_once("src/evidence.rs", "use tracing::{info, warn};\n", "use tracing::info;\n")
 
           replace_all("tests/sandbox_test.rs", "can_exec: false", "can_exec: vec![]")
+          replace_once(
+              "tests/sandbox_test.rs",
+              "    assert!(!manifest.can_exec);\\n",
+              "    assert!(manifest.can_exec.is_empty());\\n",
+          )
           replace_all("tests/integration.rs", "can_exec: false", "can_exec: vec![]")
           replace_once("tests/integration.rs", "can_exec: true", 'can_exec: vec!["echo".to_string()]')
           replace_once(
