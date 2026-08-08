@@ -49,7 +49,7 @@ async fn legacy_schema_upgrades_to_current_operational_state() -> Result<()> {
     assert!(pre_upgrade_targets.is_none());
 
     let migration_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
-    let migrator = Migrator::new(&migration_path)
+    let migrator = Migrator::new(migration_path)
         .await
         .context("failed to load current migrations")?;
     migrator
