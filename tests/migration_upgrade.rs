@@ -1,9 +1,8 @@
 use anyhow::{Context, Result};
 use sqlx::{PgPool, migrate::Migrator};
+use std::path::Path;
 use url::Url;
 use uuid::Uuid;
-
-static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
 
 #[tokio::test]
 async fn legacy_schema_upgrades_to_current_operational_state() -> Result<()> {
@@ -49,7 +48,11 @@ async fn legacy_schema_upgrades_to_current_operational_state() -> Result<()> {
     assert_eq!(legacy_memory.as_deref(), Some("memory_chunks"));
     assert!(pre_upgrade_targets.is_none());
 
-    MIGRATOR
+    let migration_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
+    let migrator = Migrator::new(&migration_path)
+        .await
+        .context("failed to load current migrations")?;
+    migrator
         .run(&pool)
         .await
         .context("current migrations failed against legacy schema")?;
