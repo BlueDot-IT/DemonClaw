@@ -76,12 +76,10 @@ async fn legacy_schema_upgrades_to_current_operational_state() -> Result<()> {
     assert!(applied_migrations >= 2);
 
     pool.close().await;
-    sqlx::query(&format!(
-        "DROP DATABASE \"{database_name}\" WITH (FORCE)"
-    ))
-    .execute(&admin)
-    .await
-    .context("failed to remove migration-upgrade test database")?;
+    sqlx::query(&format!("DROP DATABASE \"{database_name}\" WITH (FORCE)"))
+        .execute(&admin)
+        .await
+        .context("failed to remove migration-upgrade test database")?;
     admin.close().await;
 
     Ok(())
