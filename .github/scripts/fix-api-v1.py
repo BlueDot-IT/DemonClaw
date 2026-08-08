@@ -84,16 +84,24 @@ new = '''Stable operator API endpoints:
 if readme.count(old) != 1:
     raise SystemExit(f"README endpoint anchor expected once, found {readme.count(old)}")
 readme = readme.replace(old, new, 1)
-readme = readme.replace("  http://127.0.0.1:3000/ingest", "  http://127.0.0.1:3000/api/v1/ingest")
+readme = readme.replace(
+    "  http://127.0.0.1:3000/ingest",
+    "  http://127.0.0.1:3000/api/v1/ingest",
+)
 readme_path.write_text(readme, encoding="utf-8")
 
 support_path = Path("SUPPORT.md")
 support = support_path.read_text(encoding="utf-8")
-support = support.replace(
-    "- HTTP routes under `/api/*` documented in the repository",
-    "- HTTP routes under `/api/v1/*` documented in the repository; unversioned `/api/*` routes are compatibility aliases for the 1.1 line",
-)
-support_path.write_text(support, encoding="utf-8")
+needle = "- HTTP routes under `/api/*` documented in the repository"
+replacement = "- HTTP routes under `/api/v1/*` documented in the repository; unversioned `/api/*` routes are compatibility aliases for the 1.1 line"
+if support.count(needle) != 1:
+    raise SystemExit(f"SUPPORT API anchor expected once, found {support.count(needle)}")
+support_path.write_text(support.replace(needle, replacement, 1), encoding="utf-8")
 
 changelog_path = Path("CHANGELOG.md")
-changelog = changelog_path.read_text(encoding="utf-8")n
+changelog = changelog_path.read_text(encoding="utf-8")
+needle = "- operations dashboard and JSON APIs for targets and findings\n"
+replacement = "- operations dashboard and JSON APIs for targets and findings\n- stable `/api/v1/*` operator API aliases while retaining unversioned 1.1 compatibility routes\n"
+if changelog.count(needle) != 1:
+    raise SystemExit(f"CHANGELOG API anchor expected once, found {changelog.count(needle)}")
+changelog_path.write_text(changelog.replace(needle, replacement, 1), encoding="utf-8")
