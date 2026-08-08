@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+No unreleased changes.
+
+## 1.1.0 - 2026-08-07
+
 ### Added
 
 - Active Defense Phase 3 baselines and drift detection backed by tamper-evident evidence events
@@ -28,6 +32,7 @@
 - first-class registered targets and persistent finding lifecycle state
 - operator CLI for initialization, health checks, target management, findings, scans, defense, and remediation
 - operations dashboard and JSON APIs for targets and findings
+- stable `/api/v1/*` operator API aliases while retaining unversioned 1.1 compatibility routes
 - versioned SQLx migration for operational state
 
 ### Fixed

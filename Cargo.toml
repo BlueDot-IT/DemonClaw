@@ -1,7 +1,15 @@
 [package]
 name = "demonclaw"
-version = "1.0.0"
+version = "1.1.0"
 edition = "2024"
+rust-version = "1.97"
+description = "Security-first purple-team and defensive operations runtime"
+license = "MIT"
+repository = "https://github.com/BlueDot-IT/DemonClaw"
+homepage = "https://github.com/BlueDot-IT/DemonClaw"
+readme = "README.md"
+keywords = ["security", "purple-team", "defense", "wasm", "agent"]
+categories = ["command-line-utilities", "development-tools"]
 
 [dependencies]
 anyhow = "1.0.102"

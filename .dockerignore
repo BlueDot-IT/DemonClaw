@@ -1,0 +1,9 @@
+.git
+.github
+target
+.env
+.env.*
+demonclaw.json
+*.log
+*.tmp
+.DS_Store

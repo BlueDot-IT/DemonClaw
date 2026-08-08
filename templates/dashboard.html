@@ -39,7 +39,7 @@
 (function(){
   var evtCount={{ evidence_count }}; var tbody=document.getElementById('events-tbody'); var eventsBody=document.getElementById('events-body'); var count=document.getElementById('evt-count');
   if(typeof EventSource==='undefined') return;
-  var es=new EventSource('/api/events/stream');
+  var es=new EventSource('/api/v1/events/stream');
   es.onmessage=function(msg){
     try{
       var ev=JSON.parse(msg.data); if(!tbody){ location.reload(); return; }

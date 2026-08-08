@@ -17,8 +17,8 @@
   <a href="https://www.rust-lang.org">
     <img src="https://img.shields.io/badge/rust-stable-orange.svg" alt="Rust" />
   </a>
-  <a href="https://github.com/BlueDot-IT/DemonClaw/releases/tag/v1.0.0">
-    <img src="https://img.shields.io/badge/release-v1.0.0-blue.svg" alt="Release v1.0.0" />
+  <a href="https://github.com/BlueDot-IT/DemonClaw/releases/tag/v1.1.0">
+    <img src="https://img.shields.io/badge/release-v1.1.0-blue.svg" alt="Release v1.1.0" />
   </a>
 </p>
 
@@ -28,7 +28,7 @@ It combines policy-gated orchestration, capability-scoped WASM execution, semant
 
 ## Release status
 
-The current release is `v1.0.0`.
+The current release is `v1.1.0`.
 
 Implemented runtime surfaces include:
 
@@ -64,17 +64,19 @@ See `SPEC.md` for the implemented architecture and security invariants. See `CON
 
 The default listener is `127.0.0.1:3000`, and ingest authentication is enabled by default. Dashboard and read APIs still require an authenticated reverse proxy or another restricted deployment boundary when exposed remotely.
 
-Key endpoints:
+Stable operator API endpoints:
 
-- `POST /ingest`
-- `GET /healthz`
-- `GET /dashboard/`
-- `GET /api/status`
-- `GET /api/evidence`
-- `GET /api/evidence/verify`
-- `GET /api/policy`
-- `GET /api/events/stream`
-- `GET /api/memory/search?q=...`
+- `POST /api/v1/ingest`
+- `GET /api/v1/status`
+- `GET /api/v1/targets`
+- `GET /api/v1/findings`
+- `GET /api/v1/evidence`
+- `GET /api/v1/evidence/verify`
+- `GET /api/v1/policy`
+- `GET /api/v1/events/stream`
+- `GET /api/v1/memory/search?q=...`
+
+`GET /healthz` and `/dashboard/*` are operational surfaces outside the versioned API. The older unversioned `/api/*` routes remain 1.1 compatibility aliases but new integrations should use `/api/v1/*`.
 
 ## Operator CLI
 
@@ -91,6 +93,37 @@ demonclaw findings list
 ```
 
 The daemon remains available with `demonclaw run`. CLI security operations submit authenticated commands to the local daemon after resolving the registered target.
+
+## Installation
+
+### Release bundle
+
+Download the release archive for `linux-x86_64` or `linux-aarch64`, verify its adjacent SHA-256 file and GitHub provenance, extract it, then run:
+
+```bash
+sudo ./packaging/install.sh
+```
+
+Each release also publishes an SPDX JSON SBOM. GitHub provenance can be verified with:
+
+```bash
+gh attestation verify demonclaw-1.1.0-linux-x86_64.tar.gz -R BlueDot-IT/DemonClaw
+```
+
+The installer does not create secrets or start the service. Follow the printed steps to populate `/etc/demonclaw/demonclaw.env`, migrate, run `doctor`, and enable the service.
+
+### Docker Compose
+
+```bash
+export POSTGRES_PASSWORD="$(openssl rand -hex 32)"
+export DEMONCLAW_TOKEN="$(openssl rand -hex 32)"
+docker compose up -d --build
+docker compose exec demonclaw demonclaw doctor
+```
+
+The Compose deployment publishes both PostgreSQL and DemonClaw only on loopback. SSH keys are never mounted automatically; add an explicit read-only mount only when remote SSH targets require one.
+
+See `SUPPORT.md`, `UPGRADING.md`, `SECURITY_MODEL.md`, and `docs/DEMO.md` before production deployment.
 
 ## Quick start
 
@@ -125,7 +158,7 @@ Do not commit `.env` files or credentials. `.env.example` contains names and saf
 ### 3. Run DemonClaw
 
 ```bash
-cargo run --locked
+cargo run --locked -- run
 ```
 
 ### 4. Send an authenticated envelope
@@ -135,7 +168,7 @@ curl -s \
   -H 'content-type: application/json' \
   -H "x-demonclaw-token: ${DEMONCLAW_TOKEN}" \
   -d '{"content":"memory:compact"}' \
-  http://127.0.0.1:3000/ingest
+  http://127.0.0.1:3000/api/v1/ingest
 ```
 
 ## Testing
@@ -162,7 +195,11 @@ Report vulnerabilities privately according to `.github/SECURITY.md`.
 - `CHANGELOG.md`: release history
 - `RELEASE_CHECKLIST.md`: release validation
 - `SECURITY_EXCEPTIONS.md`: reviewed dependency-advisory exceptions
-- `.github/workflows/release.yml`: idempotent publication of existing version tags
+- `SECURITY_MODEL.md`: trust boundaries, guarantees, and explicit non-goals
+- `SUPPORT.md`: production support and compatibility policy
+- `UPGRADING.md`: forward-migration and rollback procedure
+- `docs/DEMO.md`: reproducible operator demo
+- `.github/workflows/release.yml`: native x86_64/arm64 release bundles and checksums
 
 ## License
 

@@ -2,28 +2,30 @@ name: release
 
 on:
   push:
-    branches: [main]
     tags: ['v*']
-    paths:
-      - .github/workflows/release.yml
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing tag to publish
-        required: false
-        default: v1.0.0
+        description: Existing version tag to publish
+        required: true
+        default: v1.1.0
         type: string
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  publish:
-    runs-on: ubuntu-latest
+  prepare:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+      version: ${{ steps.release.outputs.version }}
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -32,39 +34,152 @@ jobs:
           fetch-tags: true
           persist-credentials: false
 
-      - name: Publish GitHub release
+      - name: Validate tag and prepare draft release
+        id: release
         env:
           GH_TOKEN: ${{ github.token }}
-          REQUESTED_TAG: ${{ inputs.tag || 'v1.0.0' }}
+          REQUESTED_TAG: ${{ inputs.tag || 'v1.1.0' }}
         shell: bash
         run: |
           set -euo pipefail
-
           if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
             tag="$GITHUB_REF_NAME"
           else
             tag="$REQUESTED_TAG"
           fi
-
+          [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
           git rev-parse --verify "refs/tags/${tag}^{commit}" >/dev/null
-
-          if gh release view "$tag" >/dev/null 2>&1; then
-            echo "Release $tag already exists."
-            exit 0
-          fi
+          git checkout --detach "$tag"
 
           version="${tag#v}"
+          manifest_version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n1)"
+          [[ "$manifest_version" == "$version" ]]
+
           awk -v version="$version" '
-            $0 ~ "^## " version "([[:space:]]|$)" { found = 1; next }
+            $0 ~ "^## " version "([[:space:]-]|$)" { found = 1; next }
             found && /^## / { exit }
             found { print }
           ' CHANGELOG.md > release-notes.md
+          test -s release-notes.md
 
-          if [[ ! -s release-notes.md ]]; then
-            printf 'DemonClaw %s\n' "$version" > release-notes.md
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" \
+              --verify-tag \
+              --draft \
+              --title "DemonClaw $version" \
+              --notes-file release-notes.md
           fi
 
-          gh release create "$tag" \
-            --verify-tag \
-            --title "DemonClaw $version" \
-            --notes-file release-notes.md
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            platform: linux-x86_64
+          - runner: ubuntu-24.04-arm
+            platform: linux-aarch64
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
+          persist-credentials: false
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c
+        with:
+          toolchain: 1.97.1
+
+      - name: Build release binary
+        run: cargo build --locked --release
+
+      - name: Package release bundle
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          PLATFORM: ${{ matrix.platform }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          package="demonclaw-${VERSION}-${PLATFORM}"
+          mkdir -p "dist/${package}/packaging/systemd"
+          install -m 0755 target/release/demonclaw "dist/${package}/demonclaw"
+          cp -a templates migrations "dist/${package}/"
+          install -m 0755 packaging/install.sh "dist/${package}/packaging/install.sh"
+          install -m 0644 packaging/demonclaw.env.example "dist/${package}/packaging/demonclaw.env.example"
+          install -m 0644 packaging/systemd/demonclaw.service "dist/${package}/packaging/systemd/demonclaw.service"
+          cp README.md CONFIG.md SUPPORT.md SECURITY_MODEL.md UPGRADING.md CHANGELOG.md LICENSE "dist/${package}/"
+          tar -C dist -czf "dist/${package}.tar.gz" "$package"
+          (cd dist && sha256sum "${package}.tar.gz" > "${package}.tar.gz.sha256")
+
+      - name: Generate SPDX SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          file: dist/demonclaw-${{ needs.prepare.outputs.version }}-${{ matrix.platform }}.tar.gz
+          format: spdx-json
+          output-file: dist/demonclaw-${{ needs.prepare.outputs.version }}-${{ matrix.platform }}.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Attest build provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: dist/demonclaw-${{ needs.prepare.outputs.version }}-${{ matrix.platform }}.tar.gz
+
+      - name: Attest SBOM
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: dist/demonclaw-${{ needs.prepare.outputs.version }}-${{ matrix.platform }}.tar.gz
+          sbom-path: dist/demonclaw-${{ needs.prepare.outputs.version }}-${{ matrix.platform }}.spdx.json
+
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          PLATFORM: ${{ matrix.platform }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          package="demonclaw-${VERSION}-${PLATFORM}"
+          gh release upload "$TAG" \
+            "dist/${package}.tar.gz" \
+            "dist/${package}.tar.gz.sha256" \
+            "dist/${package}.spdx.json" \
+            --clobber
+
+  publish:
+    needs: [prepare, build]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Verify assets and publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          assets="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')"
+          for platform in linux-x86_64 linux-aarch64; do
+            package="demonclaw-${VERSION}-${platform}"
+            for asset in \
+              "${package}.tar.gz" \
+              "${package}.tar.gz.sha256" \
+              "${package}.spdx.json"; do
+              grep -Fxq "$asset" <<< "$assets"
+            done
+          done
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false

@@ -1,0 +1,33 @@
+[Unit]
+Description=DemonClaw defensive operations runtime
+Documentation=https://github.com/BlueDot-IT/DemonClaw
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=demonclaw
+Group=demonclaw
+WorkingDirectory=/opt/demonclaw
+Environment=HOME=/var/lib/demonclaw
+EnvironmentFile=/etc/demonclaw/demonclaw.env
+ExecStart=/usr/local/bin/demonclaw run
+Restart=on-failure
+RestartSec=5s
+UMask=0077
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=/var/lib/demonclaw
+
+[Install]
+WantedBy=multi-user.target

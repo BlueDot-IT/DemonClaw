@@ -15,5 +15,33 @@ services:
     volumes:
       - demonclaw_pgdata:/var/lib/postgresql/data
 
+  demonclaw:
+    build:
+      context: .
+    image: demonclaw:local
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@db:5432/demonclaw
+      DEMONCLAW_HTTP_BIND: 0.0.0.0:3000
+      DEMONCLAW_INGEST_AUTH_ENABLED: "true"
+      DEMONCLAW_TOKEN: ${DEMONCLAW_TOKEN:?DEMONCLAW_TOKEN must be set}
+      DEMONCLAW_REQUIRE_ENGAGEMENT: ${DEMONCLAW_REQUIRE_ENGAGEMENT:-true}
+      DEMONCLAW_ENGAGEMENT_ID: ${DEMONCLAW_ENGAGEMENT_ID:-}
+      DEMONCLAW_MAX_TOOL_LEVEL: ${DEMONCLAW_MAX_TOOL_LEVEL:-passive}
+      DEMONCLAW_SSH_ALLOWLIST: ${DEMONCLAW_SSH_ALLOWLIST:-}
+      GHOSTMCP_AUTO_APPROVE: ${GHOSTMCP_AUTO_APPROVE:-false}
+    ports:
+      - "127.0.0.1:3000:3000"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+
 volumes:
   demonclaw_pgdata:

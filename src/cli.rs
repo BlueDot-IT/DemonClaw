@@ -417,7 +417,7 @@ async fn submit_envelope(content: &str) -> Result<Value> {
     let cfg = DemonClawConfig::load()?;
     let client = reqwest::Client::new();
     let mut request = client
-        .post(format!("{}/ingest", api_base_url(&cfg)))
+        .post(format!("{}/api/v1/ingest", api_base_url(&cfg)))
         .json(&serde_json::json!({"content": content}));
 
     if cfg.security.ingest_auth_enabled {
@@ -447,7 +447,7 @@ async fn submit_envelope(content: &str) -> Result<Value> {
 async fn print_api_status() -> Result<()> {
     let cfg = DemonClawConfig::load()?;
     let response = reqwest::Client::new()
-        .get(format!("{}/api/status", api_base_url(&cfg)))
+        .get(format!("{}/api/v1/status", api_base_url(&cfg)))
         .send()
         .await
         .context("failed to reach DemonClaw daemon")?;
