@@ -6,6 +6,7 @@ on:
     paths:
       - .github/workflows/apply-productization-release.yml
       - .github/scripts/apply-productization-release.py
+      - .github/scripts/fix-productization-release.py
   workflow_dispatch:
 
 permissions:
@@ -31,7 +32,11 @@ jobs:
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
       - name: Apply distribution changes
-        run: python3 .github/scripts/apply-productization-release.py
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/apply-productization-release.py
+          python3 .github/scripts/fix-productization-release.py
 
       - name: Refresh root lock metadata
         run: cargo check
@@ -67,6 +72,18 @@ jobs:
           tar -tzf "dist/${package}.tar.gz" | grep -F "${package}/packaging/install.sh"
           sha256sum "dist/${package}.tar.gz"
 
+      - name: Generate validation SPDX SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          file: dist/demonclaw-1.1.0-linux-x86_64.tar.gz
+          format: spdx-json
+          output-file: dist/demonclaw-1.1.0-linux-x86_64.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Verify SBOM output
+        run: test -s dist/demonclaw-1.1.0-linux-x86_64.spdx.json
+
       - name: Build and smoke Docker image
         shell: bash
         run: |
@@ -98,7 +115,11 @@ jobs:
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
       - name: Apply distribution changes
-        run: python3 .github/scripts/apply-productization-release.py
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/apply-productization-release.py
+          python3 .github/scripts/fix-productization-release.py
 
       - name: Build native ARM64 release
         shell: bash
@@ -128,6 +149,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 .github/scripts/apply-productization-release.py
+          python3 .github/scripts/fix-productization-release.py
           cargo check
 
       - name: Commit verified distribution layer
@@ -137,7 +159,10 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$ORG_SYNC_TOKEN"
-          rm -f .github/workflows/apply-productization-release.yml .github/scripts/apply-productization-release.py
+          rm -f \
+            .github/workflows/apply-productization-release.yml \
+            .github/scripts/apply-productization-release.py \
+            .github/scripts/fix-productization-release.py
           git config user.name "DemonClaw CI"
           git config user.email "actions@users.noreply.github.com"
           git add -A
