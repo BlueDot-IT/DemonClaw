@@ -52,6 +52,11 @@ patch(
     '.get(format!("{}/api/status", api_base_url(&cfg)))',
     '.get(format!("{}/api/v1/status", api_base_url(&cfg)))',
 )
+patch(
+    "templates/dashboard.html",
+    "var es=new EventSource('/api/events/stream');",
+    "var es=new EventSource('/api/v1/events/stream');",
+)
 
 readme_path = Path("README.md")
 readme = readme_path.read_text(encoding="utf-8")
@@ -97,6 +102,29 @@ replacement = "- HTTP routes under `/api/v1/*` documented in the repository; unv
 if support.count(needle) != 1:
     raise SystemExit(f"SUPPORT API anchor expected once, found {support.count(needle)}")
 support_path.write_text(support.replace(needle, replacement, 1), encoding="utf-8")
+
+security_path = Path("SECURITY_MODEL.md")
+security = security_path.read_text(encoding="utf-8")
+needle = "`POST /ingest` has application token authentication by default."
+replacement = "`POST /api/v1/ingest` has application token authentication by default. The legacy `/ingest` route remains a 1.1 compatibility alias."
+if security.count(needle) != 1:
+    raise SystemExit(f"SECURITY_MODEL API anchor expected once, found {security.count(needle)}")
+security_path.write_text(security.replace(needle, replacement, 1), encoding="utf-8")
+
+demo_path = Path("docs/DEMO.md")
+demo = demo_path.read_text(encoding="utf-8")
+demo = demo.replace("http://127.0.0.1:3000/api/targets", "http://127.0.0.1:3000/api/v1/targets")
+demo = demo.replace("http://127.0.0.1:3000/api/findings", "http://127.0.0.1:3000/api/v1/findings")
+demo = demo.replace("http://127.0.0.1:3000/api/evidence/verify", "http://127.0.0.1:3000/api/v1/evidence/verify")
+demo_path.write_text(demo, encoding="utf-8")
+
+checklist_path = Path("RELEASE_CHECKLIST.md")
+checklist = checklist_path.read_text(encoding="utf-8")
+checklist = checklist.replace(
+    "- [ ] verify authorized and unauthorized `POST /ingest` behavior",
+    "- [ ] verify authorized and unauthorized `POST /api/v1/ingest` behavior",
+)
+checklist_path.write_text(checklist, encoding="utf-8")
 
 changelog_path = Path("CHANGELOG.md")
 changelog = changelog_path.read_text(encoding="utf-8")
