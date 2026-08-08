@@ -76,6 +76,22 @@ Key endpoints:
 - `GET /api/events/stream`
 - `GET /api/memory/search?q=...`
 
+## Operator CLI
+
+DemonClaw now exposes a supported operator CLI instead of requiring raw internal envelope commands:
+
+```bash
+demonclaw init
+demonclaw migrate
+demonclaw doctor
+demonclaw target add web-01 --ssh admin@10.0.0.20 --tag production
+demonclaw defend baseline web-01
+demonclaw scan vuln web-01
+demonclaw findings list
+```
+
+The daemon remains available with `demonclaw run`. CLI security operations submit authenticated commands to the local daemon after resolving the registered target.
+
 ## Quick start
 
 ### 1. Start PostgreSQL and pgvector

@@ -10,6 +10,7 @@ use crate::{
     evidence::EvidenceLocker,
     ghostmcp::GhostMcp,
     memory::MemoryManager,
+    operations::OperationsStore,
     sandbox::{Manifest, Sandbox},
     scanner::Scanner,
     security::SecurityPolicy,
@@ -33,6 +34,7 @@ pub struct AgentLoop {
     darkprompt: DarkPrompt,
     security_policy: SecurityPolicy,
     evidence_locker: EvidenceLocker,
+    operations: OperationsStore,
     payload_slots: Semaphore,
 }
 
@@ -45,6 +47,7 @@ pub struct AgentLoopDeps {
     pub darkprompt: DarkPrompt,
     pub security_policy: SecurityPolicy,
     pub evidence_locker: EvidenceLocker,
+    pub operations: OperationsStore,
     pub max_concurrent_payloads: usize,
 }
 
@@ -60,6 +63,7 @@ impl AgentLoop {
             darkprompt: deps.darkprompt,
             security_policy: deps.security_policy,
             evidence_locker: deps.evidence_locker,
+            operations: deps.operations,
             payload_slots: Semaphore::new(deps.max_concurrent_payloads.max(1)),
         }
     }
@@ -141,6 +145,7 @@ impl AgentLoop {
                             &self.security_policy,
                             &self.ghostmcp,
                             &self.evidence_locker,
+                            &self.operations,
                         )
                         .await
                         {

@@ -2,7 +2,7 @@ name: ci
 
 on:
   push:
-    branches: [main, org-sync, 'fix/**']
+    branches: [main, org-sync, 'fix/**', 'feat/**']
   pull_request:
     branches: [main, org-sync]
   workflow_dispatch:

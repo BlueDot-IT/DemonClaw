@@ -11,6 +11,7 @@ use demonclaw::{
     ghostmcp::GhostMcp,
     r#loop::{AgentLoop, AgentLoopDeps},
     memory::MemoryManager,
+    operations::OperationsStore,
     sandbox::Sandbox,
     scanner::Scanner,
     scheduler::Scheduler,
@@ -20,7 +21,14 @@ use demonclaw::{
 #[tokio::main]
 async fn main() -> Result<()> {
     dotenvy::dotenv().ok();
+    demonclaw::tls::ensure_crypto_provider_installed();
+    if demonclaw::cli::handle_cli().await? {
+        return Ok(());
+    }
+    run_daemon().await
+}
 
+async fn run_daemon() -> Result<()> {
     let cfg = DemonClawConfig::load()?;
     if cfg.security.ingest_auth_enabled {
         let token = std::env::var(&cfg.security.ingest_token_env).with_context(|| {
@@ -63,13 +71,14 @@ async fn main() -> Result<()> {
     memory
         .init_schema()
         .await
-        .context("failed to initialize memory schema")?;
+        .context("failed to initialize database migrations")?;
 
     let evidence_locker = EvidenceLocker::new(memory.pool.clone());
     evidence_locker
         .init_schema()
         .await
         .context("failed to initialize Evidence Locker schema")?;
+    let operations = OperationsStore::new(memory.pool.clone());
 
     let memory_optimizer = memory.clone();
     tokio::spawn(async move {
@@ -85,6 +94,7 @@ async fn main() -> Result<()> {
         darkprompt,
         security_policy: security_policy.clone(),
         evidence_locker: evidence_locker.clone(),
+        operations: operations.clone(),
         max_concurrent_payloads: cfg.runtime.max_concurrent_payloads,
     });
 
@@ -95,6 +105,7 @@ async fn main() -> Result<()> {
         tx.clone(),
         cfg.security.clone(),
         evidence_locker,
+        operations,
         security_policy,
         Some(memory),
     ));
@@ -117,13 +128,13 @@ async fn main() -> Result<()> {
     let channels_http = channels.clone();
 
     tokio::select! {
-          result = agent_task => {
-    result.context("agent loop task failed")??;
-    bail!("agent loop exited unexpectedly")
-          }
-          result = channels_http.run_http_server(&http_bind) => {
-    result.context("HTTP server failed")?;
-    bail!("HTTP server exited unexpectedly")
-          }
-      }
+        result = agent_task => {
+            result.context("agent loop task failed")??;
+            bail!("agent loop exited unexpectedly")
+        }
+        result = channels_http.run_http_server(&http_bind) => {
+            result.context("HTTP server failed")?;
+            bail!("HTTP server exited unexpectedly")
+        }
+    }
 }

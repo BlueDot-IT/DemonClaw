@@ -5,6 +5,7 @@ use tracing::info;
 use crate::{
     evidence::EvidenceLocker,
     ghostmcp::GhostMcp,
+    operations::OperationsStore,
     security::{SecurityPolicy, ToolLevel},
     types::Envelope,
 };
@@ -110,6 +111,7 @@ pub async fn handle_active_defense_command(
     security: &SecurityPolicy,
     ghostmcp: &GhostMcp,
     evidence: &EvidenceLocker,
+    operations: &OperationsStore,
 ) -> Result<bool> {
     let Some(cmd) = parse_active_defense_command(env) else {
         return Ok(false);
@@ -170,12 +172,19 @@ pub async fn handle_active_defense_command(
                 ScanKind::Vuln => detect_vuln_findings(req.target.clone())?,
                 ScanKind::Intrusion => detect_intrusion_findings(req.target.clone())?,
             };
-            evidence
+            let scan_event = evidence
                 .record(
                     "active_defense.scan.findings",
                     json!({"kind": req.kind, "target": req.target, "payload": evidence_payload_for_findings(&findings)}),
                     Some(env.id),
                 )
+                .await?;
+            let scope = match req.kind {
+                ScanKind::Vuln => "vulnerability",
+                ScanKind::Intrusion => "intrusion",
+            };
+            operations
+                .reconcile_findings(&req.target, scope, "scan", &findings, Some(scan_event.id))
                 .await?;
 
             evidence
@@ -304,11 +313,20 @@ pub async fn handle_active_defense_command(
 
             let (findings, verifications) = run_verify(target.clone())?;
 
-            evidence
+            let findings_event = evidence
                 .record(
                     "active_defense.findings",
                     evidence_payload_for_findings(&findings),
                     Some(env.id),
+                )
+                .await?;
+            operations
+                .reconcile_findings(
+                    &target,
+                    "vulnerability",
+                    "verify",
+                    &findings,
+                    Some(findings_event.id),
                 )
                 .await?;
             evidence
@@ -335,6 +353,14 @@ pub async fn handle_active_defense_command(
                 security.check_engagement_context("active_defense_remote_baseline")?;
             }
 
+            let vuln_findings = detect_vuln_findings(target.clone())?;
+            let intrusion_findings = detect_intrusion_findings(target.clone())?;
+            operations
+                .reconcile_findings(&target, "vulnerability", "baseline", &vuln_findings, None)
+                .await?;
+            operations
+                .reconcile_findings(&target, "intrusion", "baseline", &intrusion_findings, None)
+                .await?;
             let snapshot = capture_baseline(target.clone(), evidence, Some(env.id)).await?;
             evidence
                 .record(
@@ -374,6 +400,15 @@ pub async fn handle_active_defense_command(
                     .await?;
                 return Ok(true);
             };
+
+            let vuln_findings = detect_vuln_findings(target.clone())?;
+            let intrusion_findings = detect_intrusion_findings(target.clone())?;
+            operations
+                .reconcile_findings(&target, "vulnerability", "drift", &vuln_findings, None)
+                .await?;
+            operations
+                .reconcile_findings(&target, "intrusion", "drift", &intrusion_findings, None)
+                .await?;
 
             let has_added = !report.added.is_empty();
             evidence
@@ -495,13 +530,33 @@ pub async fn handle_active_defense_command(
                     .await?;
             }
 
-            let mut findings = detect_vuln_findings(target.clone())?;
-            findings.extend(detect_intrusion_findings(target.clone())?);
-            evidence
+            let vuln_findings = detect_vuln_findings(target.clone())?;
+            let intrusion_findings = detect_intrusion_findings(target.clone())?;
+            let mut findings = vuln_findings.clone();
+            findings.extend(intrusion_findings.clone());
+            let findings_event = evidence
                 .record(
                     "active_defense.defend_run.findings",
                     evidence_payload_for_findings(&findings),
                     Some(env.id),
+                )
+                .await?;
+            operations
+                .reconcile_findings(
+                    &target,
+                    "vulnerability",
+                    "defend_run",
+                    &vuln_findings,
+                    Some(findings_event.id),
+                )
+                .await?;
+            operations
+                .reconcile_findings(
+                    &target,
+                    "intrusion",
+                    "defend_run",
+                    &intrusion_findings,
+                    Some(findings_event.id),
                 )
                 .await?;
 

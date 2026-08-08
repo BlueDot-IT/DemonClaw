@@ -10,6 +10,7 @@ Do not commit local configuration files or credentials. `.env`, `.env.*`, and `d
 | --- | --- | --- |
 | `DEMONCLAW_CONFIG` | `demonclaw.json` | Optional JSON configuration path |
 | `DEMONCLAW_HTTP_BIND` | `127.0.0.1:3000` | HTTP listener address |
+| `DEMONCLAW_API_URL` | derived from HTTP bind | CLI connection URL for an already-running daemon |
 | `DATABASE_URL` | `postgres://localhost/demonclaw` | PostgreSQL connection string |
 | `DEMONCLAW_EVENT_BUFFER` | `256` | Internal envelope channel capacity |
 | `DEMONCLAW_MAX_CONCURRENT_PAYLOADS` | `4` | Maximum simultaneous payload executions |

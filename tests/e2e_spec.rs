@@ -4,6 +4,7 @@ use demonclaw::{
     ghostmcp::GhostMcp,
     r#loop::{AgentLoop, AgentLoopDeps},
     memory::MemoryManager,
+    operations::OperationsStore,
     sandbox::Sandbox,
     scanner::Scanner,
     security::SecurityPolicy,
@@ -48,6 +49,7 @@ async fn e2e_payload_to_evidence_flow() -> anyhow::Result<()> {
     memory.init_schema().await?;
     let evidence = EvidenceLocker::new(memory.pool.clone());
     evidence.init_schema().await?;
+    let operations = OperationsStore::new(memory.pool.clone());
 
     let signalgate = SignalGate::new(SignalGateConfig::default())?;
     let sandbox = Sandbox::new()?;
@@ -69,6 +71,7 @@ async fn e2e_payload_to_evidence_flow() -> anyhow::Result<()> {
         darkprompt,
         security_policy: security,
         evidence_locker: evidence.clone(),
+        operations,
         max_concurrent_payloads: 1,
     });
 

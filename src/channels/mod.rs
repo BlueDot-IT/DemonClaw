@@ -1,6 +1,10 @@
 use crate::{
-    config::SecurityConfig, evidence::EvidenceLocker, memory::MemoryManager,
-    security::SecurityPolicy, types::Envelope,
+    config::SecurityConfig,
+    evidence::EvidenceLocker,
+    memory::MemoryManager,
+    operations::{FindingStatus, OperationsStore},
+    security::SecurityPolicy,
+    types::Envelope,
 };
 use axum::{
     Json, Router,
@@ -62,6 +66,7 @@ pub struct Channels {
     security: SecurityConfig,
     rate_limiter: Arc<RateLimiter>,
     evidence: EvidenceLocker,
+    operations: OperationsStore,
     policy: SecurityPolicy,
     templates: tera::Tera,
     memory: Option<MemoryManager>,
@@ -74,6 +79,7 @@ impl Channels {
         tx: mpsc::Sender<Envelope>,
         security: SecurityConfig,
         evidence: EvidenceLocker,
+        operations: OperationsStore,
         policy: SecurityPolicy,
         memory: Option<MemoryManager>,
     ) -> Self {
@@ -101,6 +107,7 @@ impl Channels {
             security,
             rate_limiter: Arc::new(RateLimiter::new(60, 60)),
             evidence,
+            operations,
             policy,
             templates,
             memory,
@@ -134,12 +141,15 @@ impl Channels {
             .route("/healthz", get(healthz_handler))
             .route("/dashboard/", get(dashboard_handler))
             .route("/dashboard/evidence", get(evidence_handler))
+            .route("/dashboard/operations", get(operations_handler))
             .route("/dashboard/policy", get(policy_handler))
             .route("/dashboard/memory", get(memory_handler))
             .route("/dashboard/payloads", get(payloads_handler))
             .route("/api/status", get(api_status))
             .route("/api/evidence", get(api_evidence))
             .route("/api/evidence/verify", get(api_evidence_verify))
+            .route("/api/targets", get(api_targets))
+            .route("/api/findings", get(api_findings))
             .route("/api/policy", get(api_policy))
             .route("/api/events/stream", get(sse_events_handler))
             .route("/api/memory/search", get(api_memory_search))
@@ -228,6 +238,24 @@ async fn dashboard_handler(
     ctx.insert("chain_valid", &verify.is_valid);
     ctx.insert("tool_level", &format!("{:?}", state.policy.max_tool_level));
     ctx.insert("engagement_id", &state.policy.engagement_id);
+    let targets = state
+        .operations
+        .list_targets()
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let open_findings = state
+        .operations
+        .list_open_findings(8)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let open_finding_count = state
+        .operations
+        .count_open_findings()
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    ctx.insert("target_count", &targets.len());
+    ctx.insert("open_finding_count", &open_finding_count);
+    ctx.insert("open_findings", &open_findings);
 
     let html = render_template(&state.templates, "dashboard.html", &ctx)?;
     Ok(Html(html))
@@ -254,6 +282,34 @@ async fn evidence_handler(
     ctx.insert("verify", &verify);
 
     let html = render_template(&state.templates, "evidence.html", &ctx)?;
+    Ok(Html(html))
+}
+
+async fn operations_handler(
+    State(state): State<Arc<Channels>>,
+) -> Result<Html<String>, (StatusCode, String)> {
+    let targets = state
+        .operations
+        .list_targets()
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let findings = state
+        .operations
+        .list_findings(None, 250)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let open_count = state
+        .operations
+        .count_open_findings()
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let mut ctx = tera::Context::new();
+    ctx.insert("page", &"operations");
+    ctx.insert("targets", &targets);
+    ctx.insert("findings", &findings);
+    ctx.insert("open_count", &open_count);
+    let html = render_template(&state.templates, "operations.html", &ctx)?;
     Ok(Html(html))
 }
 
@@ -491,9 +547,23 @@ async fn api_status(
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
+    let target_count = state
+        .operations
+        .list_targets()
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .len();
+    let open_finding_count = state
+        .operations
+        .count_open_findings()
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
     Ok(Json(serde_json::json!({
         "status": "operational",
         "evidence_count": evidence_count,
+        "registered_targets": target_count,
+        "open_findings": open_finding_count,
         "latest_events": latest_events,
         "policy": {
             "engagement_id": state.policy.engagement_id,
@@ -531,6 +601,34 @@ async fn api_evidence_verify(
         "broken_links": verify.broken_links,
         "hash_mismatches": verify.hash_mismatches,
     })))
+}
+
+async fn api_targets(
+    State(state): State<Arc<Channels>>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let targets = state
+        .operations
+        .list_targets()
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    Ok(Json(serde_json::json!({"targets": targets})))
+}
+
+async fn api_findings(
+    State(state): State<Arc<Channels>>,
+    axum::extract::Query(params): axum::extract::Query<HashMap<String, String>>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let status = params
+        .get("status")
+        .map(|value| FindingStatus::parse(value))
+        .transpose()
+        .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+    let findings = state
+        .operations
+        .list_findings(status, 250)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    Ok(Json(serde_json::json!({"findings": findings})))
 }
 
 async fn api_policy(

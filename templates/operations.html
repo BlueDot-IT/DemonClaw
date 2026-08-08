@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Operations — DemonClaw{% endblock %}
+{% block content %}
+<div class="stats">
+  <div class="stat"><div class="stat-lbl">Registered Targets</div><div class="stat-val c">{{ targets | length }}</div></div>
+  <div class="stat"><div class="stat-lbl">Open Findings</div><div class="stat-val {% if open_count > 0 %}r{% else %}g{% endif %}">{{ open_count }}</div></div>
+</div>
+
+<div class="card">
+  <div class="card-hdr">Registered Targets <span class="badge bg-c">CLI: demonclaw target</span></div>
+  <div class="card-body">
+    {% if targets | length == 0 %}<div class="empty">No targets registered. Use <code>demonclaw target add</code>.</div>{% else %}
+    <table class="tbl">
+      <thead><tr><th>Name</th><th>Target</th><th>Tags</th><th>Enabled</th><th>Updated</th></tr></thead>
+      <tbody>{% for target in targets %}<tr>
+        <td><strong>{{ target.name }}</strong></td><td><code>{{ target.target_label }}</code></td>
+        <td>{{ target.tags | join(sep=",") | default(value="-") }}</td>
+        <td>{% if target.enabled %}<span class="badge bg-g">YES</span>{% else %}<span class="badge bg-r">NO</span>{% endif %}</td>
+        <td class="time">{{ target.updated_at | date(format="%b %d %H:%M:%S") }}</td>
+      </tr>{% endfor %}</tbody>
+    </table>{% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-hdr">Finding Lifecycle <span class="badge bg-p">persistent state</span></div>
+  <div class="card-body">
+    {% if findings | length == 0 %}<div class="empty">No findings recorded.</div>{% else %}
+    <table class="tbl">
+      <thead><tr><th>Severity</th><th>Status</th><th>Target</th><th>Finding</th><th>Seen</th><th>Count</th></tr></thead>
+      <tbody>{% for finding in findings %}<tr>
+        <td><span class="badge {% if finding.severity == 'critical' or finding.severity == 'high' %}bg-r{% elif finding.severity == 'medium' %}bg-y{% else %}bg-c{% endif %}">{{ finding.severity }}</span></td>
+        <td><span class="badge {% if finding.status == 'resolved' %}bg-g{% elif finding.status == 'false_positive' %}bg-c{% else %}bg-p{% endif %}">{{ finding.status }}</span></td>
+        <td><code>{{ finding.target_label }}</code></td><td><strong>{{ finding.title }}</strong><div class="db">{{ finding.detail }}</div></td>
+        <td class="time">{{ finding.last_seen | date(format="%b %d %H:%M:%S") }}</td><td>{{ finding.occurrence_count }}</td>
+      </tr>{% endfor %}</tbody>
+    </table>{% endif %}
+  </div>
+</div>
+{% endblock %}

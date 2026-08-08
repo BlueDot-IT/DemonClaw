@@ -1,5 +1,6 @@
 pub mod active_defense;
 pub mod channels;
+pub mod cli;
 pub mod config;
 pub mod darkprompt;
 pub mod embeddings;
@@ -7,6 +8,7 @@ pub mod evidence;
 pub mod ghostmcp;
 pub mod r#loop;
 pub mod memory;
+pub mod operations;
 pub mod sandbox;
 pub mod scanner;
 pub mod scheduler;

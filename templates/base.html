@@ -64,7 +64,7 @@ a{color:var(--acc);text-decoration:none}a:hover{text-decoration:underline}
 /* verify */
 .verify{display:flex;align-items:center;gap:10px;padding:14px;border-radius:6px;margin-bottom:14px}
 .verify.ok{background:rgba(61,255,155,.07);border:1px solid var(--grn-dim)}
-.verify.bad{background:rgba(255,61,87,.07);border:1px solid var(--red-dim}
+.verify.bad{background:rgba(255,61,87,.07);border:1px solid var(--red-dim)}
 .verify-icon{font-size:1.3rem}
 /* status dot */
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
@@ -93,6 +93,7 @@ a{color:var(--acc);text-decoration:none}a:hover{text-decoration:underline}
     <div class="sb-logo"><a href="/dashboard/">DEMON<span>CLAW</span></a></div>
     <div class="sb-sec">Operations</div>
     <a class="sb-nav {% if page == 'dashboard' %}on{% endif %}" href="/dashboard/">◈ Dashboard</a>
+    <a class="sb-nav {% if page == 'operations' %}on{% endif %}" href="/dashboard/operations">◆ Operations</a>
     <a class="sb-nav {% if page == 'evidence' %}on{% endif %}" href="/dashboard/evidence">◉ Evidence</a>
     <a class="sb-nav {% if page == 'policy' %}on{% endif %}" href="/dashboard/policy">◊ Policy</a>
     <a class="sb-nav {% if page == 'memory' %}on{% endif %}" href="/dashboard/memory">◈ Memory</a>

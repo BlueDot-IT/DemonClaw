@@ -23,6 +23,18 @@
 - changed engagement, tool-level, HTTP bind, ingest-auth, and remediation defaults to fail-safe values
 - replaced raw envelope-content evidence and SSE broadcasts with hashes and byte counts
 
+### Added
+
+- first-class registered targets and persistent finding lifecycle state
+- operator CLI for initialization, health checks, target management, findings, scans, defense, and remediation
+- operations dashboard and JSON APIs for targets and findings
+- versioned SQLx migration for operational state
+
+### Fixed
+
+- normalized Evidence Locker timestamps to PostgreSQL microsecond precision before hashing
+- initialized the configured rustls crypto provider before CLI HTTP clients are constructed
+
 ### Changed
 
 - corrected repository badges and links for `BlueDot-IT/DemonClaw`

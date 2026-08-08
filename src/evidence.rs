@@ -31,7 +31,11 @@ impl EvidenceEvent {
         detail: Value,
         envelope_id: Option<Uuid>,
     ) -> Self {
-        let timestamp = Utc::now();
+        // PostgreSQL TIMESTAMPTZ stores microsecond precision. Normalize before hashing
+        // so a freshly-created event verifies identically after a database round trip.
+        let now = Utc::now();
+        let timestamp = DateTime::<Utc>::from_timestamp_micros(now.timestamp_micros())
+            .expect("UTC timestamp should be representable at microsecond precision");
         let kind_str = kind.into();
         let hash = Self::compute_hash(id, &prev_hash, &timestamp, &kind_str, &detail, &envelope_id);
 
