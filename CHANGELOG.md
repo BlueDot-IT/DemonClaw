@@ -2,7 +2,10 @@
 
 ## Unreleased
 
-No unreleased changes.
+### Validation
+
+- added a PostgreSQL migration-upgrade regression test from the legacy 1.0 memory schema to the current operational-state schema
+- made database migrations, `doctor`, operator CLI commands, authenticated `/api/v1/ingest`, stable v1 read APIs, and Evidence Locker verification permanent CI smoke tests
 
 ## 1.1.0 - 2026-08-07
 
