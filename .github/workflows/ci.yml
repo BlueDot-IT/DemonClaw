@@ -34,6 +34,8 @@ jobs:
 
     env:
       DATABASE_URL: postgres://postgres@localhost:5433/demonclaw
+      DEMONCLAW_TOKEN: ci-operator-smoke-token
+      DEMONCLAW_REQUIRE_ENGAGEMENT: '0'
       RUST_BACKTRACE: 1
 
     steps:
@@ -63,3 +65,62 @@ jobs:
 
       - name: Run tests
         run: cargo test --locked --all
+
+      - name: Exercise migrations and operator CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --locked -- migrate
+          cargo run --locked -- doctor
+          cargo run --locked -- target add ci-local --local --tag ci
+          cargo run --locked -- target list | grep -F 'ci-local'
+          cargo run --locked -- findings list
+          cargo run --locked -- version | grep -F 'demonclaw 1.1.0'
+
+      - name: Exercise daemon and stable v1 API
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --locked -- run >/tmp/demonclaw-ci.log 2>&1 &
+          daemon_pid=$!
+          cleanup() {
+            kill "$daemon_pid" 2>/dev/null || true
+            wait "$daemon_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          ready=0
+          for _ in $(seq 1 60); do
+            if curl --fail --silent --show-error http://127.0.0.1:3000/healthz >/dev/null; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          if [[ "$ready" -ne 1 ]]; then
+            cat /tmp/demonclaw-ci.log
+            exit 1
+          fi
+
+          cargo run --locked -- status | grep -F '"registered_targets": 1'
+          curl --fail --silent --show-error http://127.0.0.1:3000/api/v1/targets | grep -F 'ci-local'
+          curl --fail --silent --show-error http://127.0.0.1:3000/api/v1/findings >/dev/null
+          curl --fail --silent --show-error http://127.0.0.1:3000/api/v1/evidence/verify | grep -F '"is_valid":true'
+
+          unauth_status="$(curl --silent --show-error -o /tmp/unauthorized-ingest.json -w '%{http_code}' \
+            -H 'content-type: application/json' \
+            -d '{"content":"memory:compact"}' \
+            http://127.0.0.1:3000/api/v1/ingest)"
+          if [[ "$unauth_status" == 2* ]]; then
+            cat /tmp/unauthorized-ingest.json
+            echo 'unauthenticated ingest unexpectedly succeeded' >&2
+            exit 1
+          fi
+
+          curl --fail-with-body --silent --show-error \
+            -H 'content-type: application/json' \
+            -H "x-demonclaw-token: ${DEMONCLAW_TOKEN}" \
+            -d '{"content":"memory:compact"}' \
+            http://127.0.0.1:3000/api/v1/ingest >/dev/null
+
+          cargo run --locked -- doctor
