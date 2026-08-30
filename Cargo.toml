@@ -29,7 +29,7 @@ uuid = { version = "1.18.1", features = ["v4", "serde"] }
 wasmparser = "0.240.0"
 wasmtime = "46.0.2"
 wasmtime-wasi = "46.0.2"
-ipnetwork = "0.20.0"
+ipnetwork = "0.21.1"
 regex = { version = "1.11.1", default-features = false, features = ["std", "perf"] }
 sha2 = "0.10.8"
 url = "2.5.4"
